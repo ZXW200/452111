@@ -305,6 +305,11 @@ class LLMStrategy:
         self.last_message: str = ""  # 最后生成的消息
 
     @property
+    def name(self) -> str:
+        """策略名称，用于显示和日志"""
+        return f"LLM ({self.provider}/{self.mode})"
+
+    @property
     def client(self):
         """延迟加载 LLM 客户端"""
         if self._client is None:
