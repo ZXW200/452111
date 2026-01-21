@@ -4,6 +4,7 @@ Game Simulation Engine - Manage the entire simulation process
 """
 import json
 import os
+import concurrent.futures
 from datetime import datetime
 from typing import List, Dict, Callable, Optional, Tuple
 from dataclasses import dataclass, field
@@ -145,35 +146,61 @@ class GameSimulation:
         return results
     
     def _run_single_round(self) -> Dict:
-        """执行单轮博弈"""
+        """
+        执行单轮博弈（并行化版本）
+
+        优化：使用 ThreadPoolExecutor 并行执行所有 Agent 的 choose_action 调用，
+        将每轮耗时从 N * API延迟 缩短到 1 * API延迟
+        """
         round_data = {
             "round": self.current_round,
             "interactions": [],
             "round_payoffs": {name: 0.0 for name in self.agents}
         }
-        
+
         # 获取本轮交互对
         pairs = self.network.get_interaction_pairs()
-        
+
+        # 准备所有决策任务：收集 (agent, history, opponent_name) 元组
+        decision_tasks = []
         for agent1_name, agent2_name in pairs:
             agent1 = self.agents[agent1_name]
             agent2 = self.agents[agent2_name]
-            
+
             # 获取双方历史
             history1 = agent1.get_history_with(agent2_name)
             history2 = agent2.get_history_with(agent1_name)
-            
-            # 选择动作
-            action1 = agent1.strategy.choose_action(history1, agent2_name)
-            action2 = agent2.strategy.choose_action(history2, agent1_name)
-            
+
+            # 添加两个决策任务（每对交互需要两个决策）
+            decision_tasks.append((agent1.strategy, history1, agent2_name))
+            decision_tasks.append((agent2.strategy, history2, agent1_name))
+
+        # 定义执行单个决策的函数
+        def execute_decision(task):
+            strategy, history, opponent_name = task
+            return strategy.choose_action(history, opponent_name)
+
+        # 并行执行所有决策
+        # ThreadPoolExecutor 适合 I/O 密集型任务（如 API 调用）
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            actions = list(executor.map(execute_decision, decision_tasks))
+
+        # 处理结果：将并行获取的动作与交互对匹配
+        for i, (agent1_name, agent2_name) in enumerate(pairs):
+            agent1 = self.agents[agent1_name]
+            agent2 = self.agents[agent2_name]
+
+            # 从并行结果中获取动作（每对交互占用两个连续的结果）
+            action1 = actions[i * 2]
+            action2 = actions[i * 2 + 1]
+
             # 计算收益
             payoff1, payoff2 = get_payoff(self.game_config, action1, action2)
-            
+
             # 记录结果
             agent1.record_game(agent2_name, action1, action2, payoff1)
             agent2.record_game(agent1_name, action2, action1, payoff2)
-            
+
             # 更新 LLM 策略的 total_payoff（如果有此方法）
             if hasattr(agent1.strategy, 'update_payoff'):
                 agent1.strategy.update_payoff(payoff1)
@@ -189,10 +216,10 @@ class GameSimulation:
                 "payoff1": payoff1,
                 "payoff2": payoff2,
             })
-            
+
             round_data["round_payoffs"][agent1_name] += payoff1
             round_data["round_payoffs"][agent2_name] += payoff2
-        
+
         return round_data
     
     def _trigger_reflection(self):
