@@ -304,35 +304,8 @@ def create_strategy(strategy_name: str, **kwargs) -> Strategy:
     Returns:
         策略实例
     """
-    # 特殊处理 LLM 策略
-    if strategy_name == "llm":
-        from .llm_strategy import LLMStrategy
-        return LLMStrategy(**kwargs)
-
     if strategy_name not in STRATEGY_REGISTRY:
         raise ValueError(f"Unknown strategy: {strategy_name}. "
-                        f"Available: {list(STRATEGY_REGISTRY.keys()) + ['llm']}")
+                        f"Available: {list(STRATEGY_REGISTRY.keys())}")
 
     return STRATEGY_REGISTRY[strategy_name](**kwargs)
-
-
-# ============================================================
-# 测试代码 / Test Code
-# ============================================================
-
-if __name__ == "__main__":
-    print("=== Strategy Test ===\n")
-
-    # 模拟博弈历史
-    history = [
-        (Action.COOPERATE, Action.COOPERATE),
-        (Action.COOPERATE, Action.DEFECT),
-        (Action.DEFECT, Action.DEFECT),
-        (Action.DEFECT, Action.COOPERATE),
-    ]
-
-    # 测试各种策略
-    for name, strategy_cls in STRATEGY_REGISTRY.items():
-        strategy = strategy_cls() if name not in ["random", "probabilistic"] else strategy_cls()
-        action = strategy.choose_action(history)
-        print(f"{name:25s} -> {action.value}")

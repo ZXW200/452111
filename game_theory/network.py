@@ -400,35 +400,3 @@ def visualize_network(network: InteractionNetwork, output_path: str = None):
         plt.close()
     else:
         print("networkx not installed, cannot visualize")
-
-
-# ============================================================
-# 测试代码 / Test Code
-# ============================================================
-
-if __name__ == "__main__":
-    agents = [f"Agent_{i}" for i in range(10)]
-    
-    print("=== Network Test ===\n")
-    
-    for name, network_cls in NETWORK_REGISTRY.items():
-        print(f"\n--- {name} ---")
-        
-        if name == "grid":
-            network = network_cls(agents, cols=4)
-        elif name == "star":
-            network = network_cls(agents, center="Agent_0")
-        elif name == "small_world":
-            network = network_cls(agents, k=4, p=0.3)
-        elif name == "scale_free":
-            network = network_cls(agents, m=2)
-        elif name == "random":
-            network = network_cls(agents, p=0.3)
-        else:
-            network = network_cls(agents)
-        
-        stats = network.get_network_stats()
-        print(f"  Agents: {stats['num_agents']}")
-        print(f"  Edges: {stats['num_edges']}")
-        print(f"  Avg Degree: {stats['avg_degree']:.2f}")
-        print(f"  Agent_0 neighbors: {network.get_neighbors('Agent_0')}")

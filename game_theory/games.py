@@ -156,21 +156,3 @@ def action_from_string(s: str) -> Action:
         return Action.DEFECT
     else:
         raise ValueError(f"Unknown action: {s}")
-
-
-# ============================================================
-# 测试代码 / Test Code
-# ============================================================
-
-if __name__ == "__main__":
-    # 测试囚徒困境
-    print("=== Prisoner's Dilemma Test ===")
-    print(get_payoff_description(PRISONERS_DILEMMA))
-    print()
-    
-    # 测试收益计算
-    p1, p2 = get_payoff(PRISONERS_DILEMMA, Action.COOPERATE, Action.DEFECT)
-    print(f"C vs D: Player1={p1}, Player2={p2}")
-    
-    p1, p2 = get_payoff(PRISONERS_DILEMMA, Action.COOPERATE, Action.COOPERATE)
-    print(f"C vs C: Player1={p1}, Player2={p2}")
