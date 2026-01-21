@@ -397,20 +397,3 @@ def run_quick_experiment(
     sim.verbose = verbose
     
     return sim.run()
-
-
-# ============================================================
-# 测试代码 / Test Code
-# ============================================================
-
-if __name__ == "__main__":
-    print("=== Game Simulation Test ===\n")
-    
-    # 快速实验：5种策略对抗
-    results = run_quick_experiment(
-        strategies=["tit_for_tat", "always_cooperate", "always_defect", "random", "pavlov"],
-        game_type="prisoners_dilemma",
-        network_type="fully_connected",
-        rounds=50,
-        verbose=True,
-    )

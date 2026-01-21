@@ -30,7 +30,7 @@ plt.rcParams['axes.unicode_minus'] = False
 # 博弈论模块导入
 from game_theory.games import (
     PRISONERS_DILEMMA, SNOWDRIFT, STAG_HUNT,
-    Action, GameConfig, get_payoff, get_payoff_description
+    Action, GameConfig, get_payoff, get_payoff_description, GAME_REGISTRY
 )
 from game_theory.llm_strategy import LLMStrategy
 from game_theory.strategies import (
@@ -38,7 +38,7 @@ from game_theory.strategies import (
     GrimTrigger, Pavlov, RandomStrategy
 )
 from game_theory.network import (
-    FullyConnectedNetwork, SmallWorldNetwork, ScaleFreeNetwork
+    FullyConnectedNetwork, SmallWorldNetwork, ScaleFreeNetwork, NETWORK_REGISTRY
 )
 from game_theory.simulation import AgentState, GameSimulation
 
@@ -47,24 +47,10 @@ from game_theory.simulation import AgentState, GameSimulation
 # 全局配置
 # ============================================================
 
-# 博弈类型配置
-GAME_CONFIGS = {
-    "prisoners_dilemma": PRISONERS_DILEMMA,
-    "snowdrift": SNOWDRIFT,
-    "stag_hunt": STAG_HUNT,
-}
-
 GAME_NAMES_CN = {
     "prisoners_dilemma": "囚徒困境",
     "snowdrift": "雪堆博弈",
     "stag_hunt": "猎鹿博弈",
-}
-
-# 网络类型配置
-NETWORK_CONFIGS = {
-    "fully_connected": FullyConnectedNetwork,
-    "small_world": SmallWorldNetwork,
-    "scale_free": ScaleFreeNetwork,
 }
 
 NETWORK_NAMES_CN = {
@@ -113,7 +99,7 @@ class ResultManager:
         os.makedirs(self.root_dir, exist_ok=True)
 
         # 为每个博弈创建子目录
-        for game_name in GAME_CONFIGS.keys():
+        for game_name in GAME_REGISTRY.keys():
             game_dir = os.path.join(self.root_dir, game_name)
             os.makedirs(game_dir, exist_ok=True)
 
@@ -325,7 +311,7 @@ def experiment_pure_vs_hybrid(
     """
 
     if games is None:
-        games = list(GAME_CONFIGS.keys())
+        games = list(GAME_REGISTRY.keys())
 
     print_separator("实验1: Pure vs Hybrid LLM")
     print("Pure:   LLM 自己从历史分析对手")
@@ -335,7 +321,7 @@ def experiment_pure_vs_hybrid(
     all_results = {}
 
     for game_name in games:
-        game_config = GAME_CONFIGS[game_name]
+        game_config = GAME_REGISTRY[game_name]
         print_game_header(game_name)
 
         results = {"pure": [], "hybrid": []}
@@ -454,7 +440,7 @@ def experiment_memory_window(
     """记忆视窗对比实验"""
 
     if games is None:
-        games = list(GAME_CONFIGS.keys())
+        games = list(GAME_REGISTRY.keys())
 
     print_separator("实验2: 记忆视窗对比")
     print(f"测试不同历史记忆长度: {windows}")
@@ -463,7 +449,7 @@ def experiment_memory_window(
     all_results = {}
 
     for game_name in games:
-        game_config = GAME_CONFIGS[game_name]
+        game_config = GAME_REGISTRY[game_name]
         print_game_header(game_name)
 
         window_results = {}
@@ -563,7 +549,7 @@ def experiment_multi_llm(
     """多 LLM 对比实验"""
 
     if games is None:
-        games = list(GAME_CONFIGS.keys())
+        games = list(GAME_REGISTRY.keys())
 
     print_separator("实验3: 多 LLM 对比")
     print(f"对比 LLM: {providers}")
@@ -572,7 +558,7 @@ def experiment_multi_llm(
     all_results = {}
 
     for game_name in games:
-        game_config = GAME_CONFIGS[game_name]
+        game_config = GAME_REGISTRY[game_name]
         print_game_header(game_name)
 
         provider_results = {}
@@ -676,7 +662,7 @@ def experiment_cheap_talk(
     """Cheap Talk 实验"""
 
     if games is None:
-        games = list(GAME_CONFIGS.keys())
+        games = list(GAME_REGISTRY.keys())
 
     print_separator("实验4: Cheap Talk (语言交流)")
     print("对比: 无交流 vs 有语言交流")
@@ -685,7 +671,7 @@ def experiment_cheap_talk(
     all_results = {}
 
     for game_name in games:
-        game_config = GAME_CONFIGS[game_name]
+        game_config = GAME_REGISTRY[game_name]
         print_game_header(game_name)
 
         results = {"no_talk": [], "cheap_talk": []}
@@ -823,7 +809,7 @@ def experiment_group_dynamics(
     """群体动力学实验（单 Provider）"""
 
     if games is None:
-        games = list(GAME_CONFIGS.keys())
+        games = list(GAME_REGISTRY.keys())
     if networks is None:
         networks = ["fully_connected", "small_world"]
 
@@ -834,7 +820,7 @@ def experiment_group_dynamics(
     all_results = {}
 
     for game_name in games:
-        game_config = GAME_CONFIGS[game_name]
+        game_config = GAME_REGISTRY[game_name]
         print_game_header(game_name)
 
         network_results = {}
@@ -863,7 +849,7 @@ def experiment_group_dynamics(
                 agent_names = [name for name, _ in selected]
 
                 # 创建网络（传入 agent 名称列表）
-                NetworkClass = NETWORK_CONFIGS[network_name]
+                NetworkClass = NETWORK_REGISTRY[network_name]
                 network = NetworkClass(agent_names)
 
                 # 创建 agents 字典
@@ -937,7 +923,7 @@ def experiment_group_dynamics_multi_provider(
     if providers is None:
         providers = ["deepseek", "openai", "claude"]
     if games is None:
-        games = list(GAME_CONFIGS.keys())
+        games = list(GAME_REGISTRY.keys())
     if networks is None:
         networks = ["fully_connected", "small_world"]
 
@@ -948,7 +934,7 @@ def experiment_group_dynamics_multi_provider(
     all_results = {}
 
     for game_name in games:
-        game_config = GAME_CONFIGS[game_name]
+        game_config = GAME_REGISTRY[game_name]
         print_game_header(game_name)
 
         network_results = {}
@@ -979,7 +965,7 @@ def experiment_group_dynamics_multi_provider(
                 agent_names = [name for name, _ in strategies]
 
                 # 创建网络
-                NetworkClass = NETWORK_CONFIGS[network_name]
+                NetworkClass = NETWORK_REGISTRY[network_name]
                 network = NetworkClass(agent_names)
 
                 # 创建 agents 字典
@@ -1160,7 +1146,7 @@ def experiment_baseline_comparison(
     """Baseline 对比实验"""
 
     if games is None:
-        games = list(GAME_CONFIGS.keys())
+        games = list(GAME_REGISTRY.keys())
 
     baselines = {
         "TitForTat": TitForTat,
@@ -1178,7 +1164,7 @@ def experiment_baseline_comparison(
     all_results = {}
 
     for game_name in games:
-        game_config = GAME_CONFIGS[game_name]
+        game_config = GAME_REGISTRY[game_name]
         print_game_header(game_name)
 
         baseline_results = {}
@@ -1365,7 +1351,7 @@ def main():
         "provider": provider,
         "n_repeats": n_repeats,
         "rounds": rounds,
-        "games": games or list(GAME_CONFIGS.keys()),
+        "games": games or list(GAME_REGISTRY.keys()),
         "timestamp": result_manager.timestamp,
     }
     result_manager.save_config(config)
