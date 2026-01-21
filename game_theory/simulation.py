@@ -9,6 +9,11 @@ from datetime import datetime
 from typing import List, Dict, Callable, Optional, Tuple
 from dataclasses import dataclass, field
 
+# 针对 I/O 密集型 API 请求优化的线程池大小
+# Python 默认是 min(32, CPU+4)，但 API 请求是"纯等待"任务，可以开更大
+# 100 个线程足以支持大规模并行 API 调用
+MAX_API_WORKERS = 100
+
 from .games import GameConfig, Action, get_payoff, PRISONERS_DILEMMA
 from .network import InteractionNetwork, FullyConnectedNetwork
 from .strategies import Strategy, create_strategy
@@ -182,7 +187,8 @@ class GameSimulation:
 
         # 并行执行所有决策
         # ThreadPoolExecutor 适合 I/O 密集型任务（如 API 调用）
-        with concurrent.futures.ThreadPoolExecutor() as executor:
+        # 使用较大的线程池以确保所有 Agent 真正同时发起请求
+        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_API_WORKERS) as executor:
             actions = list(executor.map(execute_decision, decision_tasks))
 
         # 处理结果：将并行获取的动作与交互对匹配
