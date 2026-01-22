@@ -1138,12 +1138,12 @@ def _plot_group_rankings(network_results: Dict, game_name: str) -> Optional[plt.
 
 def experiment_baseline_comparison(
     result_manager: ResultManager,
-    provider: str = DEFAULT_CONFIG["provider"],
+    providers: List[str] = ["deepseek", "openai", "claude"],
     n_repeats: int = DEFAULT_CONFIG["n_repeats"],
     rounds: int = DEFAULT_CONFIG["rounds"],
     games: List[str] = None,
 ) -> Dict:
-    """Baseline 对比实验"""
+    """Baseline 对比实验（多 Provider 版本）"""
 
     if games is None:
         games = list(GAME_REGISTRY.keys())
@@ -1158,8 +1158,9 @@ def experiment_baseline_comparison(
     }
 
     print_separator("实验6: Baseline 对比")
+    print(f"LLM Providers: {providers}")
     print(f"LLM vs 经典策略: {list(baselines.keys())}")
-    print(f"Provider: {provider} | Repeats: {n_repeats} | Rounds: {rounds}")
+    print(f"Repeats: {n_repeats} | Rounds: {rounds}")
 
     all_results = {}
 
@@ -1167,85 +1168,151 @@ def experiment_baseline_comparison(
         game_config = GAME_REGISTRY[game_name]
         print_game_header(game_name)
 
-        baseline_results = {}
+        game_results = {}
 
-        for baseline_name, BaselineClass in baselines.items():
-            print(f"\n  vs {baseline_name}")
+        for provider in providers:
+            print(f"\n  🤖 Provider: {provider.upper()}")
 
-            payoffs = []
-            coop_rates = []
+            baseline_results = {}
 
-            for trial in range(n_repeats):
-                print(f"    Trial {trial + 1}/{n_repeats}...", end=" ", flush=True)
+            for baseline_name, BaselineClass in baselines.items():
+                print(f"\n    vs {baseline_name}")
 
-                try:
-                    llm_strategy = LLMStrategy(
-                        provider=provider,
-                        mode="hybrid",
-                        game_config=game_config,
-                    )
+                payoffs = []
+                coop_rates = []
 
-                    opponent = BaselineClass()
+                for trial in range(n_repeats):
+                    print(f"      Trial {trial + 1}/{n_repeats}...", end=" ", flush=True)
 
-                    llm_payoff = 0
-                    llm_history = []
-                    opp_history = []
+                    try:
+                        llm_strategy = LLMStrategy(
+                            provider=provider,
+                            mode="hybrid",
+                            game_config=game_config,
+                        )
 
-                    for r in range(rounds):
-                        llm_action = llm_strategy.choose_action(llm_history, opp_history)
-                        opp_action = opponent.choose_action(make_history_tuples(opp_history, llm_history))
+                        opponent = BaselineClass()
 
-                        payoff, _ = get_payoff(game_config, llm_action, opp_action)
-                        llm_payoff += payoff
+                        llm_payoff = 0
+                        llm_history = []
+                        opp_history = []
 
-                        llm_history.append(llm_action)
-                        opp_history.append(opp_action)
+                        for r in range(rounds):
+                            llm_action = llm_strategy.choose_action(llm_history, opp_history)
+                            opp_action = opponent.choose_action(make_history_tuples(opp_history, llm_history))
 
-                    coop_rate = compute_cooperation_rate(llm_history)
-                    payoffs.append(llm_payoff)
-                    coop_rates.append(coop_rate)
+                            payoff, _ = get_payoff(game_config, llm_action, opp_action)
+                            llm_payoff += payoff
 
-                    print(f"得分: {llm_payoff:.1f}, 合作率: {coop_rate:.1%}")
+                            llm_history.append(llm_action)
+                            opp_history.append(opp_action)
 
-                except Exception as e:
-                    print(f"错误: {e}")
-                    continue
+                        coop_rate = compute_cooperation_rate(llm_history)
+                        payoffs.append(llm_payoff)
+                        coop_rates.append(coop_rate)
 
-            baseline_results[baseline_name] = {
-                "payoff": compute_statistics(payoffs),
-                "coop_rate": compute_statistics(coop_rates),
-            }
+                        print(f"得分: {llm_payoff:.1f}, 合作率: {coop_rate:.1%}")
 
-        all_results[game_name] = baseline_results
+                    except Exception as e:
+                        print(f"错误: {e}")
+                        continue
+
+                baseline_results[baseline_name] = {
+                    "payoff": compute_statistics(payoffs),
+                    "coop_rate": compute_statistics(coop_rates),
+                }
+
+            game_results[provider] = baseline_results
+
+        all_results[game_name] = game_results
 
         # 保存结果
-        result_manager.save_json(game_name, "baseline", baseline_results)
+        result_manager.save_json(game_name, "baseline", game_results)
 
         # 生成图表
-        fig = plot_cooperation_comparison(baseline_results, "LLM vs Baselines", game_name)
-        result_manager.save_figure(game_name, "baseline", fig)
+        fig = _plot_baseline_multi_provider(game_results, game_name, providers, baselines)
+        if fig:
+            result_manager.save_figure(game_name, "baseline", fig)
 
-    _print_baseline_summary(all_results)
+    _print_baseline_summary_multi_provider(all_results, providers)
 
     return all_results
 
 
-def _print_baseline_summary(results: Dict):
-    """打印 Baseline 对比汇总"""
-    print_separator("汇总: LLM vs Baselines")
+def _plot_baseline_multi_provider(
+    game_results: Dict,
+    game_name: str,
+    providers: List[str],
+    baselines: Dict
+) -> Optional[plt.Figure]:
+    """绘制多 Provider Baseline 对比图"""
 
-    for game_name, baseline_stats in results.items():
+    n_providers = len(providers)
+    n_baselines = len(baselines)
+
+    fig, axes = plt.subplots(1, n_providers, figsize=(6 * n_providers, 6))
+    if n_providers == 1:
+        axes = [axes]
+
+    # 为不同 provider 设置颜色
+    provider_colors = {
+        "deepseek": "#4CAF50",
+        "openai": "#2196F3",
+        "claude": "#FF9800",
+    }
+
+    baseline_names = list(baselines.keys())
+
+    for ax, provider in zip(axes, providers):
+        if provider not in game_results:
+            continue
+
+        baseline_data = game_results[provider]
+        means = [baseline_data[b]["payoff"]["mean"] for b in baseline_names]
+        stds = [baseline_data[b]["payoff"]["std"] for b in baseline_names]
+
+        x = np.arange(len(baseline_names))
+        color = provider_colors.get(provider, "#9C27B0")
+        bars = ax.bar(x, means, yerr=stds, capsize=5, color=color, alpha=0.8)
+
+        ax.set_ylabel("LLM 得分")
+        ax.set_title(f"{provider.upper()}")
+        ax.set_xticks(x)
+        ax.set_xticklabels(baseline_names, rotation=45, ha='right')
+
+        for bar, mean in zip(bars, means):
+            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 1,
+                    f'{mean:.1f}', ha='center', va='bottom', fontsize=9)
+
+    game_cn = GAME_NAMES_CN.get(game_name, game_name)
+    fig.suptitle(f"LLM vs Baselines (多模型对比) - {game_cn}", fontsize=14)
+    plt.tight_layout()
+    return fig
+
+
+def _print_baseline_summary_multi_provider(results: Dict, providers: List[str]):
+    """打印多 Provider Baseline 对比汇总"""
+    print_separator("汇总: LLM vs Baselines (多模型)")
+
+    for game_name, provider_stats in results.items():
         cn_name = GAME_NAMES_CN.get(game_name, game_name)
         print(f"\n{cn_name}:")
-        print(f"  {'对手':<16} {'LLM得分':<18} {'LLM合作率':<12}")
-        print(f"  {'-' * 46}")
 
-        for baseline, stats in baseline_stats.items():
-            pay = stats["payoff"]
-            coop = stats["coop_rate"]
-            pay_str = f"{pay['mean']:.1f} ± {pay['std']:.1f}"
-            coop_str = f"{coop['mean']:.1%}"
-            print(f"  {baseline:<16} {pay_str:<18} {coop_str:<12}")
+        for provider in providers:
+            if provider not in provider_stats:
+                continue
+
+            print(f"\n  🤖 {provider.upper()}:")
+            print(f"    {'对手':<16} {'得分':<18} {'合作率':<12}")
+            print(f"    {'-' * 46}")
+
+            baseline_data = provider_stats[provider]
+            for baseline, stats in baseline_data.items():
+                pay = stats["payoff"]
+                coop = stats["coop_rate"]
+                pay_str = f"{pay['mean']:.1f} ± {pay['std']:.1f}"
+                coop_str = f"{coop['mean']:.1%}"
+                print(f"    {baseline:<16} {pay_str:<18} {coop_str:<12}")
 
 
 # ============================================================
@@ -1266,10 +1333,10 @@ def print_usage():
   window        - 实验2: 记忆视窗对比
   multi_llm     - 实验3: 多 LLM 对比
   cheap_talk    - 实验4: Cheap Talk 语言交流
-  group         - 实验5: 群体动力学（单 Provider）
-  group_multi   - 实验5b: 群体动力学（DeepSeek vs OpenAI vs Claude 同场竞技）
-  baseline      - 实验6: Baseline 对比
-  all           - 运行全部实验（不含 group_multi）
+  group         - 实验5: 群体动力学（DeepSeek/OpenAI/Claude 三模型）
+  group_single  - 实验5: 群体动力学（单 Provider，需指定 --provider）
+  baseline      - 实验6: Baseline 对比（DeepSeek/OpenAI/Claude 三模型）
+  all           - 运行全部实验
 
 选项:
   --provider    LLM 提供商 (deepseek/openai/claude)
@@ -1383,29 +1450,37 @@ def main():
         )
         all_results["cheap_talk"] = results
 
-    if experiment in ["group", "all"]:
-        results = experiment_group_dynamics(
-            result_manager, provider=provider, rounds=rounds, games=games
-        )
-        all_results["group_dynamics"] = results
-
-    if experiment in ["group_multi"]:
-        # 多 Provider 群体动力学实验
+    if experiment in ["group", "group_multi", "all"]:
+        # 群体动力学实验默认使用三模型
         results = experiment_group_dynamics_multi_provider(
             result_manager,
-            providers=["deepseek", "openai", "claude"],  # 三个 provider 同场竞技
+            providers=["deepseek", "openai", "claude"],
             rounds=rounds,
             games=games
         )
         all_results["group_dynamics_multi_provider"] = results
 
+    if experiment in ["group_single"]:
+        # 单 Provider 群体动力学实验
+        results = experiment_group_dynamics(
+            result_manager,
+            provider=provider,
+            rounds=rounds,
+            games=games
+        )
+        all_results["group_dynamics"] = results
+
     if experiment in ["baseline", "all"]:
         results = experiment_baseline_comparison(
-            result_manager, provider=provider, n_repeats=n_repeats, rounds=rounds, games=games
+            result_manager,
+            providers=["deepseek", "openai", "claude"],
+            n_repeats=n_repeats,
+            rounds=rounds,
+            games=games
         )
         all_results["baseline"] = results
 
-    if experiment not in ["pure_hybrid", "window", "multi_llm", "cheap_talk", "group", "group_multi", "baseline", "all"]:
+    if experiment not in ["pure_hybrid", "window", "multi_llm", "cheap_talk", "group", "group_multi", "group_single", "baseline", "all"]:
         print(f"未知实验: {experiment}")
         print_usage()
         return
