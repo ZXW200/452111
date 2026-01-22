@@ -145,6 +145,17 @@ class ResultManager:
             json.dump(all_results, f, ensure_ascii=False, indent=2, default=str)
         print(f"汇总保存: {filepath}")
 
+    def save_transcript(self, game_name: str, experiment_name: str, content: str) -> str:
+        """保存易读的 transcript 文本文件"""
+        game_dir = self.get_game_dir(game_name)
+        filepath = os.path.join(game_dir, f"{experiment_name}_transcript.txt")
+
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        print(f"  📝 保存: {filepath}")
+        return filepath
+
 
 # ============================================================
 # 统计工具
@@ -678,6 +689,9 @@ def experiment_cheap_talk(
         coop_rates = {"no_talk": [], "cheap_talk": []}
         promise_kept = []
 
+        # 详细记录：保存每轮的 message 和 action
+        detailed_trials = {"no_talk": [], "cheap_talk": []}
+
         for mode in ["no_talk", "cheap_talk"]:
             print(f"\n  Mode: {mode}")
 
@@ -701,7 +715,11 @@ def experiment_cheap_talk(
                     opp_history = []
                     messages_sent = []
 
+                    # 记录每轮的详细数据
+                    round_details = []
+
                     for r in range(rounds):
+                        message = ""
                         if use_cheap_talk and hasattr(llm_strategy, 'generate_message'):
                             message = llm_strategy.generate_message(llm_history, opp_history)
                             messages_sent.append(message)
@@ -709,19 +727,41 @@ def experiment_cheap_talk(
                         llm_action = llm_strategy.choose_action(llm_history, opp_history)
                         opp_action = opponent.choose_action(make_history_tuples(opp_history, llm_history))
 
-                        payoff, _ = get_payoff(game_config, llm_action, opp_action)
+                        payoff, opp_payoff = get_payoff(game_config, llm_action, opp_action)
                         llm_payoff += payoff
 
                         llm_history.append(llm_action)
                         opp_history.append(opp_action)
 
+                        # 保存本轮详细记录
+                        round_details.append({
+                            "round": r + 1,
+                            "message": message,
+                            "llm_action": llm_action.name,
+                            "opponent_action": opp_action.name,
+                            "llm_payoff": payoff,
+                            "opponent_payoff": opp_payoff,
+                            "cumulative_payoff": llm_payoff,
+                        })
+
                     coop_rate = compute_cooperation_rate(llm_history)
                     results[mode].append(llm_payoff)
                     coop_rates[mode].append(coop_rate)
 
+                    # 保存本次 trial 的完整记录
+                    trial_record = {
+                        "trial": trial + 1,
+                        "total_payoff": llm_payoff,
+                        "cooperation_rate": coop_rate,
+                        "rounds": round_details,
+                    }
+
                     if use_cheap_talk and messages_sent:
                         kept = _analyze_promise_keeping(messages_sent, llm_history)
                         promise_kept.append(kept)
+                        trial_record["promise_keeping_rate"] = kept
+
+                    detailed_trials[mode].append(trial_record)
 
                     print(f"得分: {llm_payoff:.1f}, 合作率: {coop_rate:.1%}")
 
@@ -743,8 +783,23 @@ def experiment_cheap_talk(
 
         all_results[game_name] = game_results
 
-        # 保存结果
+        # 保存统计结果
         result_manager.save_json(game_name, "cheap_talk", game_results)
+
+        # 保存详细记录（JSON 格式）
+        detailed_data = {
+            "game": game_name,
+            "provider": provider,
+            "n_repeats": n_repeats,
+            "rounds": rounds,
+            "opponent": "TitForTat",
+            "trials": detailed_trials,
+        }
+        result_manager.save_json(game_name, "cheap_talk_details", detailed_data)
+
+        # 生成易读的 transcript 文本文件
+        transcript = _generate_cheap_talk_transcript(game_name, provider, detailed_trials)
+        result_manager.save_transcript(game_name, "cheap_talk", transcript)
 
         # 生成图表
         fig = plot_cooperation_comparison(game_results, "Cheap Talk 对比", game_name)
@@ -753,6 +808,80 @@ def experiment_cheap_talk(
     _print_cheap_talk_summary(all_results)
 
     return all_results
+
+
+def _generate_cheap_talk_transcript(game_name: str, provider: str, detailed_trials: Dict) -> str:
+    """生成易读的 Cheap Talk 交互记录"""
+    cn_name = GAME_NAMES_CN.get(game_name, game_name)
+
+    lines = []
+    lines.append("=" * 70)
+    lines.append(f"CHEAP TALK 实验记录 - {cn_name}")
+    lines.append(f"LLM Provider: {provider}")
+    lines.append(f"对手策略: TitForTat (以牙还牙)")
+    lines.append("=" * 70)
+    lines.append("")
+
+    for mode in ["no_talk", "cheap_talk"]:
+        mode_name = "无交流模式 (No Talk)" if mode == "no_talk" else "有交流模式 (Cheap Talk)"
+        lines.append("-" * 70)
+        lines.append(f"【{mode_name}】")
+        lines.append("-" * 70)
+
+        for trial_data in detailed_trials[mode]:
+            trial_num = trial_data["trial"]
+            total_payoff = trial_data["total_payoff"]
+            coop_rate = trial_data["cooperation_rate"]
+
+            lines.append("")
+            lines.append(f">>> Trial {trial_num} | 总得分: {total_payoff:.1f} | 合作率: {coop_rate:.1%}")
+
+            if "promise_keeping_rate" in trial_data:
+                lines.append(f"    承诺遵守率: {trial_data['promise_keeping_rate']:.1%}")
+
+            lines.append("")
+
+            for rd in trial_data["rounds"]:
+                round_num = rd["round"]
+                message = rd["message"]
+                llm_action = rd["llm_action"]
+                opp_action = rd["opponent_action"]
+                payoff = rd["llm_payoff"]
+                cumulative = rd["cumulative_payoff"]
+
+                lines.append(f"  Round {round_num:2d}:")
+
+                if message:
+                    # 检测言行是否一致
+                    cooperation_keywords = ["合作", "cooperate", "trust", "信任", "一起"]
+                    promised_coop = any(kw in message.lower() for kw in cooperation_keywords)
+
+                    if promised_coop and llm_action == "DEFECT":
+                        consistency = "[⚠ 言行不一致!]"
+                    elif promised_coop and llm_action == "COOPERATE":
+                        consistency = "[✓ 言行一致]"
+                    else:
+                        consistency = ""
+
+                    lines.append(f"    💬 消息: \"{message}\"")
+                    if consistency:
+                        lines.append(f"    {consistency}")
+
+                # 动作符号
+                llm_symbol = "🤝 合作" if llm_action == "COOPERATE" else "💀 背叛"
+                opp_symbol = "🤝 合作" if opp_action == "COOPERATE" else "💀 背叛"
+
+                lines.append(f"    🤖 LLM: {llm_symbol} | 👤 对手: {opp_symbol}")
+                lines.append(f"    📊 本轮得分: {payoff} | 累计: {cumulative}")
+                lines.append("")
+
+        lines.append("")
+
+    lines.append("=" * 70)
+    lines.append("记录结束")
+    lines.append("=" * 70)
+
+    return "\n".join(lines)
 
 
 def _analyze_promise_keeping(messages: List[str], actions: List[Action]) -> float:
