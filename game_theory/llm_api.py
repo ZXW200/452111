@@ -58,10 +58,7 @@ DEFAULT_CONFIG = {
         "base_url": "https://api.deepseek.com/v1",
         "model": "deepseek-chat",
     },
-    "ollama": {
-        "base_url": "http://localhost:11434",
-        "model": "llama3",
-    },
+
 }
 
 
