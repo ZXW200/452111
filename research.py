@@ -467,7 +467,7 @@ def experiment_pure_vs_hybrid(
                     else:
                         success_rate = 0
 
-                    # 保存详细数据
+                    # 保存详细数据（包含LLM思考过程）
                     detail_data = {
                         "experiment": "pure_vs_hybrid",
                         "game": game_name,
@@ -479,6 +479,7 @@ def experiment_pure_vs_hybrid(
                         "parse_success_rate": success_rate,
                         "llm_history": [a.name for a in llm_history],
                         "opp_history": [a.name for a in opp_history],
+                        "llm_responses": llm_strategy.raw_responses.copy(),  # LLM思考过程
                     }
                     result_manager.save_detail(f"pure_vs_hybrid_{game_name}_{mode}", provider, trial + 1, rounds, detail_data)
 
@@ -607,7 +608,7 @@ def experiment_memory_window(
                     payoffs.append(llm_payoff)
                     coop_rates.append(coop_rate)
 
-                    # 保存详细数据
+                    # 保存详细数据（包含LLM思考过程）
                     detail_data = {
                         "experiment": "memory_window",
                         "game": game_name,
@@ -618,6 +619,7 @@ def experiment_memory_window(
                         "coop_rate": coop_rate,
                         "llm_history": [a.name for a in llm_history],
                         "opp_history": [a.name for a in opp_history],
+                        "llm_responses": llm_strategy.raw_responses.copy(),  # LLM思考过程
                     }
                     result_manager.save_detail(f"memory_window_{game_name}_w{window_label}", provider, trial + 1, rounds, detail_data)
 
@@ -731,7 +733,7 @@ def experiment_multi_llm(
                     payoffs.append(llm_payoff)
                     coop_rates.append(coop_rate)
 
-                    # 保存详细数据
+                    # 保存详细数据（包含LLM思考过程）
                     detail_data = {
                         "experiment": "multi_llm",
                         "game": game_name,
@@ -742,6 +744,7 @@ def experiment_multi_llm(
                         "coop_rate": coop_rate,
                         "llm_history": [a.name for a in llm_history],
                         "opp_history": [a.name for a in opp_history],
+                        "llm_responses": llm_strategy.raw_responses.copy(),  # LLM思考过程
                     }
                     result_manager.save_detail(f"multi_llm_{game_name}", provider, trial + 1, rounds, detail_data)
 
@@ -901,7 +904,7 @@ def experiment_cheap_talk(
 
                     detailed_trials[mode].append(trial_record)
 
-                    # 保存详细数据
+                    # 保存详细数据（包含LLM思考过程）
                     detail_data = {
                         "experiment": "cheap_talk",
                         "game": game_name,
@@ -913,6 +916,7 @@ def experiment_cheap_talk(
                         "messages": messages_sent if use_cheap_talk else [],
                         "llm_history": [a.name for a in llm_history],
                         "opp_history": [a.name for a in opp_history],
+                        "llm_responses": llm_strategy.raw_responses.copy(),  # LLM思考过程
                     }
                     result_manager.save_detail(f"cheap_talk_{game_name}_{mode}", provider, trial + 1, rounds, detail_data)
 
@@ -1176,6 +1180,7 @@ def experiment_group_dynamics(
                     # 3. 收集单次数据
                     trial_payoffs = {}
                     trial_coop_rates = {}
+                    llm_responses = {}  # 收集各LLM的思考过程
                     for aid, agent in agents.items():
                         all_trials_payoffs[aid].append(agent.total_payoff)
                         trial_payoffs[aid] = agent.total_payoff
@@ -1189,7 +1194,11 @@ def experiment_group_dynamics(
                         all_trials_coop_rates[aid].append(rate)
                         trial_coop_rates[aid] = rate
 
-                    # 保存详细数据
+                        # 收集LLM响应
+                        if hasattr(agent.strategy, 'raw_responses'):
+                            llm_responses[aid] = agent.strategy.raw_responses.copy()
+
+                    # 保存详细数据（包含LLM思考过程）
                     detail_data = {
                         "experiment": "group_dynamics",
                         "game": game_name,
@@ -1199,6 +1208,7 @@ def experiment_group_dynamics(
                         "n_agents": n_agents,
                         "payoffs": trial_payoffs,
                         "coop_rates": trial_coop_rates,
+                        "llm_responses": llm_responses,  # 各LLM智能体的思考过程
                     }
                     result_manager.save_detail(f"group_{game_name}_{network_name}", provider, i + 1, rounds, detail_data)
 
@@ -1344,6 +1354,7 @@ def experiment_group_dynamics_multi_provider(
                     # 3. 收集单次数据
                     trial_payoffs = {}
                     trial_coop_rates = {}
+                    llm_responses = {}  # 收集各LLM的思考过程
                     for aid, agent in agents.items():
                         all_trials_payoffs[aid].append(agent.total_payoff)
                         trial_payoffs[aid] = agent.total_payoff
@@ -1357,7 +1368,11 @@ def experiment_group_dynamics_multi_provider(
                         all_trials_coop_rates[aid].append(rate)
                         trial_coop_rates[aid] = rate
 
-                    # 保存详细数据
+                        # 收集LLM响应
+                        if hasattr(agent.strategy, 'raw_responses'):
+                            llm_responses[aid] = agent.strategy.raw_responses.copy()
+
+                    # 保存详细数据（包含LLM思考过程）
                     detail_data = {
                         "experiment": "group_dynamics_multi",
                         "game": game_name,
@@ -1368,6 +1383,7 @@ def experiment_group_dynamics_multi_provider(
                         "n_agents": n_agents,
                         "payoffs": trial_payoffs,
                         "coop_rates": trial_coop_rates,
+                        "llm_responses": llm_responses,  # 各LLM智能体的思考过程
                     }
                     result_manager.save_detail(f"group_multi_{game_name}_{network_name}", "multi", i + 1, rounds, detail_data)
 
@@ -1588,7 +1604,7 @@ def experiment_baseline_comparison(
                         payoffs.append(llm_payoff)
                         coop_rates.append(coop_rate)
 
-                        # 保存详细数据
+                        # 保存详细数据（包含LLM思考过程）
                         detail_data = {
                             "experiment": "baseline",
                             "game": game_name,
@@ -1600,6 +1616,7 @@ def experiment_baseline_comparison(
                             "coop_rate": coop_rate,
                             "llm_history": [a.name for a in llm_history],
                             "opp_history": [a.name for a in opp_history],
+                            "llm_responses": llm_strategy.raw_responses.copy(),  # LLM思考过程
                         }
                         result_manager.save_detail(f"baseline_{game_name}_{baseline_name}", provider, trial + 1, rounds, detail_data)
 
