@@ -293,7 +293,10 @@ class LLMStrategy:
                  temperature: float = 0.7,
                  persona_prompt: str = None,
                  history_window: int = None,
-                 enable_cheap_talk: bool = False):
+                 enable_cheap_talk: bool = False,
+                 agent_name: str = "Player",
+                 personality: str = "rational and analytical",
+                 strategy_tendency: str = "balanced"):
         """
         Args:
             provider: LLM 提供商 (deepseek/openai/claude)
@@ -304,6 +307,9 @@ class LLMStrategy:
             persona_prompt: 自定义人格提示
             history_window: 历史窗口大小 (None 表示使用全部历史)
             enable_cheap_talk: 是否启用 cheap talk 消息功能
+            agent_name: 智能体名称
+            personality: 性格描述
+            strategy_tendency: 策略倾向
         """
         self.provider = provider
         self.mode = mode
@@ -313,6 +319,9 @@ class LLMStrategy:
         self.persona_prompt = persona_prompt
         self.history_window = history_window
         self.enable_cheap_talk = enable_cheap_talk
+        self.agent_name = agent_name
+        self.personality = personality
+        self.strategy_tendency = strategy_tendency
 
         self.parser = ResponseParser()
         self._client = None
@@ -507,6 +516,18 @@ class LLMStrategy:
         if hasattr(action, 'value'):
             return action.value
         return str(action).lower()
+
+    def _get_payoffs(self) -> Dict[str, int]:
+        """从 game_config 提取收益矩阵数值"""
+        if not self.game_config:
+            return {"cc": 3, "cd": 0, "dc": 5, "dd": 1}  # 默认囚徒困境
+        matrix = self.game_config.payoff_matrix
+        return {
+            "cc": matrix[(self.Action.COOPERATE, self.Action.COOPERATE)][0],
+            "cd": matrix[(self.Action.COOPERATE, self.Action.DEFECT)][0],
+            "dc": matrix[(self.Action.DEFECT, self.Action.COOPERATE)][0],
+            "dd": matrix[(self.Action.DEFECT, self.Action.DEFECT)][0],
+        }
 
     def generate_message(self,
                          my_history: List,
