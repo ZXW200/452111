@@ -17,6 +17,7 @@ Game Theory LLM Multi-Agent Research Experiments
 import json
 import os
 import sys
+import csv
 import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
@@ -82,8 +83,8 @@ class ResultManager:
         ├── experiment_config.json  # 实验配置
         ├── details/                # 每次实验详细数据
         │   └── {实验名}_{模型名}_{次数}_{轮数}.json
-        ├── summary/                # 汇总报告
-        │   └── {实验名}.json
+        ├── summary/                # 汇总报告 (CSV 格式)
+        │   └── {实验名}.csv
         ├── prisoners_dilemma/      # 博弈类型
         │   ├── pure_vs_hybrid.json
         │   └── pure_vs_hybrid.png
@@ -179,14 +180,55 @@ class ResultManager:
         return filepath
 
     def save_experiment_summary(self, experiment_name: str, data: Dict) -> str:
-        """保存实验汇总到 summary 目录"""
-        filepath = os.path.join(self.summary_dir, f"{experiment_name}.json")
+        """保存实验汇总到 summary 目录 (CSV 格式)"""
+        filepath = os.path.join(self.summary_dir, f"{experiment_name}.csv")
 
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2, default=str)
+        rows = self._flatten_summary_to_rows(experiment_name, data)
+        if rows:
+            with open(filepath, "w", encoding="utf-8", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=rows[0].keys())
+                writer.writeheader()
+                writer.writerows(rows)
 
         print(f"  📋 汇总: {filepath}")
         return filepath
+
+    def _flatten_summary_to_rows(self, experiment_name: str, data: Dict) -> List[Dict]:
+        """将嵌套的实验数据展平为 CSV 行"""
+        rows = []
+
+        for game_name, game_data in data.items():
+            if isinstance(game_data, dict):
+                for key, stats in game_data.items():
+                    if isinstance(stats, dict) and "payoff" in stats:
+                        row = {
+                            "experiment": experiment_name,
+                            "game": game_name,
+                            "condition": key,
+                            "payoff_mean": stats["payoff"].get("mean", 0),
+                            "payoff_std": stats["payoff"].get("std", 0),
+                            "coop_rate_mean": stats.get("coop_rate", {}).get("mean", 0),
+                            "coop_rate_std": stats.get("coop_rate", {}).get("std", 0),
+                            "n": stats["payoff"].get("n", 0),
+                        }
+                        rows.append(row)
+                    elif isinstance(stats, dict):
+                        # 处理 baseline 等嵌套结构
+                        for sub_key, sub_stats in stats.items():
+                            if isinstance(sub_stats, dict) and "payoff" in sub_stats:
+                                row = {
+                                    "experiment": experiment_name,
+                                    "game": game_name,
+                                    "condition": f"{key}_{sub_key}",
+                                    "payoff_mean": sub_stats["payoff"].get("mean", 0),
+                                    "payoff_std": sub_stats["payoff"].get("std", 0),
+                                    "coop_rate_mean": sub_stats.get("coop_rate", {}).get("mean", 0),
+                                    "coop_rate_std": sub_stats.get("coop_rate", {}).get("std", 0),
+                                    "n": sub_stats["payoff"].get("n", 0),
+                                }
+                                rows.append(row)
+
+        return rows
 
 
 # ============================================================
@@ -1691,8 +1733,8 @@ def print_usage():
   ├── summary.json
   ├── details/                    # 每次实验详细数据
   │   └── {实验名}_{模型名}_{次数}_{轮数}.json
-  ├── summary/                    # 各实验汇总
-  │   └── {实验名}.json
+  ├── summary/                    # 各实验汇总 (CSV 格式)
+  │   └── {实验名}.csv
   ├── prisoners_dilemma/
   │   ├── pure_vs_hybrid.json
   │   └── pure_vs_hybrid.png
