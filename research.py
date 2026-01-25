@@ -1855,11 +1855,14 @@ def print_usage():
   all           - 运行全部实验
 
 选项:
-  --provider    LLM 提供商 (deepseek/openai/claude)
-  --repeats     重复次数
-  --rounds      每次轮数
-  --games       指定博弈 (pd/snowdrift/stag_hunt/harmony/all)
-  --n_agents    群体动力学实验的智能体数量 (默认 10)
+  --provider    LLM 提供商 (deepseek/openai/claude)    [默认: deepseek]
+  --repeats     重复次数                               [默认: 3]
+  --rounds      每次轮数                               [默认: 20]
+  --games       指定博弈 (pd/snowdrift/stag_hunt/harmony/all) [默认: all]
+  --n_agents    群体动力学实验的智能体数量             [默认: 10]
+
+帮助:
+  -h, --help    显示此帮助信息
 
 结果目录结构:
   results/{时间戳}/
