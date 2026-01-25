@@ -293,7 +293,10 @@ class LLMStrategy:
                  temperature: float = 0.7,
                  persona_prompt: str = None,
                  history_window: int = None,
-                 enable_cheap_talk: bool = False):
+                 enable_cheap_talk: bool = False,
+                 agent_name: str = "Player",
+                 personality: str = "rational and analytical",
+                 strategy_tendency: str = "balanced"):
         """
         Args:
             provider: LLM 提供商 (deepseek/openai/claude)
@@ -304,6 +307,9 @@ class LLMStrategy:
             persona_prompt: 自定义人格提示
             history_window: 历史窗口大小 (None 表示使用全部历史)
             enable_cheap_talk: 是否启用 cheap talk 消息功能
+            agent_name: 智能体名称
+            personality: 性格描述
+            strategy_tendency: 策略倾向
         """
         self.provider = provider
         self.mode = mode
@@ -313,6 +319,9 @@ class LLMStrategy:
         self.persona_prompt = persona_prompt
         self.history_window = history_window
         self.enable_cheap_talk = enable_cheap_talk
+        self.agent_name = agent_name
+        self.personality = personality
+        self.strategy_tendency = strategy_tendency
 
         self.parser = ResponseParser()
         self._client = None
@@ -320,6 +329,7 @@ class LLMStrategy:
         # 调试信息
         self.raw_responses: List[str] = []
         self.total_payoff = 0.0
+        self.current_round = 0
         self.last_message: str = ""  # 最后生成的消息
 
     @property
@@ -406,14 +416,31 @@ class LLMStrategy:
                            opponent_name: str,
                            game_desc: str) -> str:
         """Pure 模式提示 - LLM 自己分析"""
+        self.current_round = len(my_history) + 1
         history_str = self._format_history(my_history, opponent_history)
-        context = f"Game History:\n{history_str}" if history_str else "This is the first round."
+        payoffs = self._get_payoffs()
+
+        # 计算统计
+        my_coop_rate = "0%" if not my_history else f"{sum(1 for a in my_history if self._get_action_value(a) == 'cooperate') / len(my_history):.0%}"
+        opp_coop_rate = "N/A" if not opponent_history else f"{sum(1 for a in opponent_history if self._get_action_value(a) == 'cooperate') / len(opponent_history):.0%}"
 
         template = _load_template("strategy_select")
         return template.format(
+            agent_name=self.agent_name,
             opponent_name=opponent_name,
+            personality=self.personality,
+            strategy_tendency=self.strategy_tendency,
             game_desc=game_desc,
-            context=context
+            cc_payoff=payoffs["cc"],
+            cd_payoff=payoffs["cd"],
+            dc_payoff=payoffs["dc"],
+            dd_payoff=payoffs["dd"],
+            current_round=self.current_round,
+            total_payoff=f"{self.total_payoff:.1f}",
+            my_coop_rate=my_coop_rate,
+            opp_coop_rate=opp_coop_rate,
+            opp_pattern=self._analyze_pattern(opponent_history),
+            history_summary=history_str if history_str else "No history yet (first round)",
         )
 
     def _build_hybrid_prompt(self,
@@ -422,10 +449,14 @@ class LLMStrategy:
                              opponent_name: str,
                              game_desc: str) -> str:
         """Hybrid 模式提示 - 代码预处理统计"""
+        self.current_round = len(my_history) + 1
         rounds_played = len(opponent_history)
+        payoffs = self._get_payoffs()
 
         if rounds_played == 0:
-            context = "This is the first round. No history yet."
+            my_coop_rate_str = "0%"
+            opp_coop_rate_str = "N/A"
+            history_summary = "No history yet (first round)"
         else:
             # 应用历史窗口限制
             window = self.history_window if self.history_window else rounds_played
@@ -433,39 +464,37 @@ class LLMStrategy:
             windowed_my = my_history[-window:]
             window_size = len(windowed_opp)
 
-            # 计算对手统计（窗口内）
+            # 计算统计
             opp_coop = sum(1 for a in windowed_opp if self._get_action_value(a) == "cooperate")
             opp_coop_rate = opp_coop / window_size
-
-            # 最近趋势
-            recent = windowed_opp[-5:] if len(windowed_opp) >= 5 else windowed_opp
-            recent_coop = sum(1 for a in recent if self._get_action_value(a) == "cooperate")
-            recent_rate = recent_coop / len(recent)
-
-            # 我的统计（窗口内）
             my_coop = sum(1 for a in windowed_my if self._get_action_value(a) == "cooperate")
             my_coop_rate = my_coop / window_size if window_size > 0 else 0
 
-            # 获取最后动作的字符串值
-            last_action = self._get_action_value(opponent_history[-1]) if opponent_history else 'N/A'
-            window_info = f" (window: last {window} rounds)" if self.history_window else ""
+            my_coop_rate_str = f"{my_coop_rate:.0%}"
+            opp_coop_rate_str = f"{opp_coop_rate:.0%} ({opp_coop}/{window_size})"
 
-            context = f"""Rounds played: {rounds_played}{window_info}
-
-Opponent Statistics:
-- Overall cooperation rate: {opp_coop_rate:.1%} ({opp_coop}/{window_size})
-- Recent 5 rounds cooperation: {recent_rate:.1%}
-- Last action: {last_action}
-
-Your Statistics:
-- Your cooperation rate: {my_coop_rate:.1%}
-- Your total payoff so far: {self.total_payoff:.1f}"""
+            # 格式化历史
+            window_info = f" (last {window} rounds)" if self.history_window else ""
+            last_action = self._get_action_value(opponent_history[-1])
+            history_summary = f"Rounds: {rounds_played}{window_info}, Last opponent action: {last_action}"
 
         template = _load_template("strategy_select")
         return template.format(
+            agent_name=self.agent_name,
             opponent_name=opponent_name,
+            personality=self.personality,
+            strategy_tendency=self.strategy_tendency,
             game_desc=game_desc,
-            context=context
+            cc_payoff=payoffs["cc"],
+            cd_payoff=payoffs["cd"],
+            dc_payoff=payoffs["dc"],
+            dd_payoff=payoffs["dd"],
+            current_round=self.current_round,
+            total_payoff=f"{self.total_payoff:.1f}",
+            my_coop_rate=my_coop_rate_str,
+            opp_coop_rate=opp_coop_rate_str,
+            opp_pattern=self._analyze_pattern(opponent_history),
+            history_summary=history_summary,
         )
 
     def _format_history(self, my_history: List, opponent_history: List) -> str:
@@ -489,6 +518,43 @@ Your Statistics:
         if hasattr(action, 'value'):
             return action.value
         return str(action).lower()
+
+    def _get_payoffs(self) -> Dict[str, int]:
+        """从 game_config 提取收益矩阵数值"""
+        if not self.game_config:
+            return {"cc": 3, "cd": 0, "dc": 5, "dd": 1}  # 默认囚徒困境
+        matrix = self.game_config.payoff_matrix
+        return {
+            "cc": matrix[(self.Action.COOPERATE, self.Action.COOPERATE)][0],
+            "cd": matrix[(self.Action.COOPERATE, self.Action.DEFECT)][0],
+            "dc": matrix[(self.Action.DEFECT, self.Action.COOPERATE)][0],
+            "dd": matrix[(self.Action.DEFECT, self.Action.DEFECT)][0],
+        }
+
+    def _analyze_pattern(self, opponent_history: List) -> str:
+        """分析对手行为模式"""
+        if len(opponent_history) < 3:
+            return "Not enough data"
+
+        recent = opponent_history[-10:] if len(opponent_history) >= 10 else opponent_history
+        coop_count = sum(1 for a in recent if self._get_action_value(a) == "cooperate")
+        coop_rate = coop_count / len(recent)
+
+        # 检测 Tit-for-Tat 模式
+        if len(opponent_history) >= 5:
+            tft_matches = 0
+            for i in range(1, min(10, len(opponent_history))):
+                # TFT: 对手模仿我上一轮的动作
+                pass  # 需要 my_history，简化处理
+
+        if coop_rate >= 0.8:
+            return "Highly cooperative"
+        elif coop_rate >= 0.5:
+            return "Mixed/Conditional cooperator"
+        elif coop_rate >= 0.2:
+            return "Mostly defects"
+        else:
+            return "Always defects"
 
     def generate_message(self,
                          my_history: List,
