@@ -360,7 +360,8 @@ class LLMStrategy:
     def choose_action(self,
                       my_history: List,
                       opponent_history: List,
-                      opponent_name: str = "Opponent") -> Any:
+                      opponent_name: str = "Opponent",
+                      opponent_message: str = None) -> Any:
         """
         选择动作
 
@@ -368,11 +369,12 @@ class LLMStrategy:
             my_history: 我的动作历史 [Action, ...]
             opponent_history: 对手动作历史 [Action, ...]
             opponent_name: 对手名称
+            opponent_message: 对手发送的消息 (cheap talk)
 
         Returns:
             Action.COOPERATE 或 Action.DEFECT
         """
-        prompt = self._build_prompt(my_history, opponent_history, opponent_name)
+        prompt = self._build_prompt(my_history, opponent_history, opponent_name, opponent_message)
 
         try:
             response = self.client.chat(
@@ -392,7 +394,8 @@ class LLMStrategy:
     def _build_prompt(self,
                       my_history: List,
                       opponent_history: List,
-                      opponent_name: str) -> str:
+                      opponent_name: str,
+                      opponent_message: str = None) -> str:
         """构建 LLM 提示"""
 
         # 获取博弈描述
@@ -406,15 +409,16 @@ class LLMStrategy:
             game_desc = "Standard Prisoner's Dilemma"
 
         if self.mode == "pure":
-            return self._build_pure_prompt(my_history, opponent_history, opponent_name, game_desc)
+            return self._build_pure_prompt(my_history, opponent_history, opponent_name, game_desc, opponent_message)
         else:
-            return self._build_hybrid_prompt(my_history, opponent_history, opponent_name, game_desc)
+            return self._build_hybrid_prompt(my_history, opponent_history, opponent_name, game_desc, opponent_message)
 
     def _build_pure_prompt(self,
                            my_history: List,
                            opponent_history: List,
                            opponent_name: str,
-                           game_desc: str) -> str:
+                           game_desc: str,
+                           opponent_message: str = None) -> str:
         """Pure 模式提示 - LLM 自己分析"""
         self.current_round = len(my_history) + 1
         history_str = self._format_history(my_history, opponent_history)
@@ -423,7 +427,7 @@ class LLMStrategy:
         opp_coop_rate = "N/A" if not opponent_history else f"{sum(1 for a in opponent_history if self._get_action_value(a) == 'cooperate') / len(opponent_history):.0%}"
 
         template = _load_template("strategy_select")
-        return template.format(
+        prompt = template.format(
             opponent_name=opponent_name,
             game_desc=game_desc,
             current_round=self.current_round,
@@ -434,11 +438,20 @@ class LLMStrategy:
             history_summary=history_str if history_str else "No history yet (first round)",
         )
 
+        # 如果有对手消息，添加到提示中
+        if opponent_message:
+            message_section = f"\n=== OPPONENT MESSAGE ===\n{opponent_name} says: \"{opponent_message}\"\n"
+            # 插入到 YOUR TASK 之前
+            prompt = prompt.replace("=== YOUR TASK ===", message_section + "=== YOUR TASK ===")
+
+        return prompt
+
     def _build_hybrid_prompt(self,
                              my_history: List,
                              opponent_history: List,
                              opponent_name: str,
-                             game_desc: str) -> str:
+                             game_desc: str,
+                             opponent_message: str = None) -> str:
         """Hybrid 模式提示 - 代码预处理统计"""
         self.current_round = len(my_history) + 1
         rounds_played = len(opponent_history)
@@ -466,7 +479,7 @@ class LLMStrategy:
             history_summary = f"Rounds: {rounds_played}{window_info}, Last opponent action: {last_action}"
 
         template = _load_template("strategy_select")
-        return template.format(
+        prompt = template.format(
             opponent_name=opponent_name,
             game_desc=game_desc,
             current_round=self.current_round,
@@ -476,6 +489,14 @@ class LLMStrategy:
             opp_pattern=self._analyze_pattern(opponent_history),
             history_summary=history_summary,
         )
+
+        # 如果有对手消息，添加到提示中
+        if opponent_message:
+            message_section = f"\n=== OPPONENT MESSAGE ===\n{opponent_name} says: \"{opponent_message}\"\n"
+            # 插入到 YOUR TASK 之前
+            prompt = prompt.replace("=== YOUR TASK ===", message_section + "=== YOUR TASK ===")
+
+        return prompt
 
     def _analyze_pattern(self, opponent_history: List) -> str:
         """分析对手行为模式"""
