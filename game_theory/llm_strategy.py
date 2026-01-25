@@ -7,9 +7,27 @@ Game Theory LLM Strategy Module
 
 import re
 import random
+import os
 from enum import Enum
 from typing import Tuple, Optional, List, Dict, Any
 from dataclasses import dataclass, field
+
+
+# ============================================================
+# 模板路径
+# ============================================================
+
+_TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "prompts")
+_TEMPLATE_CACHE: Dict[str, str] = {}
+
+
+def _load_template(name: str) -> str:
+    """加载提示模板"""
+    if name not in _TEMPLATE_CACHE:
+        path = os.path.join(_TEMPLATE_DIR, f"{name}.txt")
+        with open(path, "r", encoding="utf-8") as f:
+            _TEMPLATE_CACHE[name] = f.read()
+    return _TEMPLATE_CACHE[name]
 
 
 # ============================================================
@@ -388,24 +406,15 @@ class LLMStrategy:
                            opponent_name: str,
                            game_desc: str) -> str:
         """Pure 模式提示 - LLM 自己分析"""
-
         history_str = self._format_history(my_history, opponent_history)
+        context = f"Game History:\n{history_str}" if history_str else "This is the first round."
 
-        prompt = f"""You are playing an iterated game against {opponent_name}.
-
-{game_desc}
-
-Game History:
-{history_str if history_str else "This is the first round."}
-
-Based on the history, decide your action for this round.
-
-IMPORTANT: End your response with exactly one of these formats:
-ACTION: COOPERATE
-or
-ACTION: DEFECT
-"""
-        return prompt
+        template = _load_template("strategy_select")
+        return template.format(
+            opponent_name=opponent_name,
+            game_desc=game_desc,
+            context=context
+        )
 
     def _build_hybrid_prompt(self,
                              my_history: List,
@@ -413,11 +422,10 @@ ACTION: DEFECT
                              opponent_name: str,
                              game_desc: str) -> str:
         """Hybrid 模式提示 - 代码预处理统计"""
-
         rounds_played = len(opponent_history)
 
         if rounds_played == 0:
-            stats_str = "This is the first round. No history yet."
+            context = "This is the first round. No history yet."
         else:
             # 应用历史窗口限制
             window = self.history_window if self.history_window else rounds_played
@@ -425,7 +433,7 @@ ACTION: DEFECT
             windowed_my = my_history[-window:]
             window_size = len(windowed_opp)
 
-            # 计算对手统计（窗口内）- 使用辅助函数兼容字符串和枚举
+            # 计算对手统计（窗口内）
             opp_coop = sum(1 for a in windowed_opp if self._get_action_value(a) == "cooperate")
             opp_coop_rate = opp_coop / window_size
 
@@ -440,11 +448,9 @@ ACTION: DEFECT
 
             # 获取最后动作的字符串值
             last_action = self._get_action_value(opponent_history[-1]) if opponent_history else 'N/A'
-
             window_info = f" (window: last {window} rounds)" if self.history_window else ""
 
-            stats_str = f"""
-Rounds played: {rounds_played}{window_info}
+            context = f"""Rounds played: {rounds_played}{window_info}
 
 Opponent Statistics:
 - Overall cooperation rate: {opp_coop_rate:.1%} ({opp_coop}/{window_size})
@@ -453,23 +459,14 @@ Opponent Statistics:
 
 Your Statistics:
 - Your cooperation rate: {my_coop_rate:.1%}
-- Your total payoff so far: {self.total_payoff:.1f}
-"""
+- Your total payoff so far: {self.total_payoff:.1f}"""
 
-        prompt = f"""You are playing an iterated game against {opponent_name}.
-
-{game_desc}
-
-{stats_str}
-
-Based on this analysis, decide your action.
-
-IMPORTANT: End your response with exactly one of these formats:
-ACTION: COOPERATE
-or
-ACTION: DEFECT
-"""
-        return prompt
+        template = _load_template("strategy_select")
+        return template.format(
+            opponent_name=opponent_name,
+            game_desc=game_desc,
+            context=context
+        )
 
     def _format_history(self, my_history: List, opponent_history: List) -> str:
         """格式化历史记录"""
