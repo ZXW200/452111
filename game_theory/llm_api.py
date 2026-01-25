@@ -51,7 +51,7 @@ DEFAULT_CONFIG = {
     },
     "gemini": {
         "api_key": "",
-        "model": "gemini-1.5-flash",
+        "model": "gemini-2.0-flash",
     },
     "deepseek": {
         "api_key": "",
@@ -159,7 +159,7 @@ class LLMClient:
     def _call_gemini(self, messages: List[Dict], temperature: float, max_tokens: int) -> str:
         """调用 Gemini API"""
         api_key = get_api_key("gemini")
-        model = self.config.get("gemini", {}).get("model", "gemini-1.5-flash")
+        model = self.config.get("gemini", {}).get("model", "gemini-2.0-flash")
 
         # 转换消息格式为 Gemini 格式
         contents = []
@@ -237,7 +237,7 @@ def setup_wizard():
     print("\n可用 Provider:")
     print("  1. deepseek  - ¥1/百万token，最便宜 (推荐)")
     print("  2. openai    - GPT-4o-mini")
-    print("  3. gemini    - Gemini 1.5 Flash")
+    print("  3. gemini    - Gemini 2.0 Flash")
     print("  4. ollama    - 本地模型，免费")
 
     choice = input("\n选择 (1-4) [1]: ").strip() or "1"
