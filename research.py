@@ -1849,6 +1849,7 @@ def print_usage():
   multi_llm     - 实验3: 多 LLM 对比
   cheap_talk    - 实验4: Cheap Talk 语言交流
   group         - 实验5: 群体动力学（DeepSeek/OpenAI/Claude 三模型）
+  group_multi   - 同 group（别名）
   group_single  - 实验5: 群体动力学（单 Provider，需指定 --provider）
   baseline      - 实验6: Baseline 对比（DeepSeek/OpenAI/Claude 三模型）
   all           - 运行全部实验
@@ -1858,13 +1859,15 @@ def print_usage():
   --repeats     重复次数
   --rounds      每次轮数
   --games       指定博弈 (pd/snowdrift/stag_hunt/all)
+  --n_agents    群体动力学实验的智能体数量 (默认 10)
 
 结果目录结构:
   results/{时间戳}/
   ├── experiment_config.json
   ├── summary.json
   ├── details/                    # 每次实验详细数据
-  │   └── {实验名}_{模型名}_{次数}_{轮数}.json
+  │   ├── {实验名}_{模型名}_{次数}_{轮数}.json
+  │   └── {实验名}_{博弈}_{模型}_rounds.json  # 每轮记录
   ├── summary/                    # 各实验汇总 (CSV 格式)
   │   └── {实验名}.csv
   ├── prisoners_dilemma/
@@ -1875,7 +1878,7 @@ def print_usage():
 
 示例:
   python research.py pure_hybrid
-  python research.py group_multi --rounds 30
+  python research.py group --rounds 30 --n_agents 15
   python research.py all --provider openai --repeats 5
   python research.py baseline --games pd
 """)
