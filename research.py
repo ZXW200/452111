@@ -185,8 +185,9 @@ class ResultManager:
 
         rows = self._flatten_summary_to_rows(experiment_name, data)
         if rows:
+            fieldnames = ["experiment", "game", "condition", "payoff", "coop_rate"]
             with open(filepath, "w", encoding="utf-8", newline="") as f:
-                writer = csv.DictWriter(f, fieldnames=rows[0].keys())
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
                 writer.writerows(rows)
 
@@ -201,34 +202,31 @@ class ResultManager:
             if isinstance(game_data, dict):
                 for key, stats in game_data.items():
                     if isinstance(stats, dict) and "payoff" in stats:
-                        row = {
-                            "experiment": experiment_name,
-                            "game": game_name,
-                            "condition": key,
-                            "payoff_mean": stats["payoff"].get("mean", 0),
-                            "payoff_std": stats["payoff"].get("std", 0),
-                            "coop_rate_mean": stats.get("coop_rate", {}).get("mean", 0),
-                            "coop_rate_std": stats.get("coop_rate", {}).get("std", 0),
-                            "n": stats["payoff"].get("n", 0),
-                        }
+                        row = self._make_summary_row(experiment_name, game_name, key, stats)
                         rows.append(row)
                     elif isinstance(stats, dict):
-                        # 处理 baseline 等嵌套结构
                         for sub_key, sub_stats in stats.items():
                             if isinstance(sub_stats, dict) and "payoff" in sub_stats:
-                                row = {
-                                    "experiment": experiment_name,
-                                    "game": game_name,
-                                    "condition": f"{key}_{sub_key}",
-                                    "payoff_mean": sub_stats["payoff"].get("mean", 0),
-                                    "payoff_std": sub_stats["payoff"].get("std", 0),
-                                    "coop_rate_mean": sub_stats.get("coop_rate", {}).get("mean", 0),
-                                    "coop_rate_std": sub_stats.get("coop_rate", {}).get("std", 0),
-                                    "n": sub_stats["payoff"].get("n", 0),
-                                }
+                                row = self._make_summary_row(experiment_name, game_name, f"{key}_{sub_key}", sub_stats)
                                 rows.append(row)
 
         return rows
+
+    def _make_summary_row(self, experiment: str, game: str, condition: str, stats: Dict) -> Dict:
+        """生成单行 summary 数据"""
+        payoff = stats.get("payoff", {})
+        coop = stats.get("coop_rate", {})
+
+        payoff_str = f"{payoff.get('mean', 0):.1f} ± {payoff.get('std', 0):.1f}"
+        coop_str = f"{coop.get('mean', 0) * 100:.1f}%"
+
+        return {
+            "experiment": experiment,
+            "game": game,
+            "condition": condition,
+            "payoff": payoff_str,
+            "coop_rate": coop_str,
+        }
 
 
 # ============================================================
