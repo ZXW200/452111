@@ -1858,7 +1858,7 @@ def print_usage():
   --provider    LLM 提供商 (deepseek/openai/claude)
   --repeats     重复次数
   --rounds      每次轮数
-  --games       指定博弈 (pd/snowdrift/stag_hunt/all)
+  --games       指定博弈 (pd/snowdrift/stag_hunt/harmony/all)
   --n_agents    群体动力学实验的智能体数量 (默认 10)
 
 结果目录结构:
