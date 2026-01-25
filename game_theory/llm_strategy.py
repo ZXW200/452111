@@ -7,9 +7,27 @@ Game Theory LLM Strategy Module
 
 import re
 import random
+import os
 from enum import Enum
 from typing import Tuple, Optional, List, Dict, Any
 from dataclasses import dataclass, field
+
+
+# ============================================================
+# 模板加载
+# ============================================================
+
+_TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "prompts")
+_TEMPLATE_CACHE: Dict[str, str] = {}
+
+
+def _load_template(name: str) -> str:
+    """加载提示模板"""
+    if name not in _TEMPLATE_CACHE:
+        path = os.path.join(_TEMPLATE_DIR, f"{name}.txt")
+        with open(path, "r", encoding="utf-8") as f:
+            _TEMPLATE_CACHE[name] = f.read()
+    return _TEMPLATE_CACHE[name]
 
 
 # ============================================================
@@ -302,6 +320,7 @@ class LLMStrategy:
         # 调试信息
         self.raw_responses: List[str] = []
         self.total_payoff = 0.0
+        self.current_round = 0
         self.last_message: str = ""  # 最后生成的消息
 
     @property
@@ -388,24 +407,23 @@ class LLMStrategy:
                            opponent_name: str,
                            game_desc: str) -> str:
         """Pure 模式提示 - LLM 自己分析"""
-
+        self.current_round = len(my_history) + 1
         history_str = self._format_history(my_history, opponent_history)
 
-        prompt = f"""You are playing an iterated game against {opponent_name}.
+        my_coop_rate = "0%" if not my_history else f"{sum(1 for a in my_history if self._get_action_value(a) == 'cooperate') / len(my_history):.0%}"
+        opp_coop_rate = "N/A" if not opponent_history else f"{sum(1 for a in opponent_history if self._get_action_value(a) == 'cooperate') / len(opponent_history):.0%}"
 
-{game_desc}
-
-Game History:
-{history_str if history_str else "This is the first round."}
-
-Based on the history, decide your action for this round.
-
-IMPORTANT: End your response with exactly one of these formats:
-ACTION: COOPERATE
-or
-ACTION: DEFECT
-"""
-        return prompt
+        template = _load_template("strategy_select")
+        return template.format(
+            opponent_name=opponent_name,
+            game_desc=game_desc,
+            current_round=self.current_round,
+            total_payoff=f"{self.total_payoff:.1f}",
+            my_coop_rate=my_coop_rate,
+            opp_coop_rate=opp_coop_rate,
+            opp_pattern=self._analyze_pattern(opponent_history),
+            history_summary=history_str if history_str else "No history yet (first round)",
+        )
 
     def _build_hybrid_prompt(self,
                              my_history: List,
@@ -413,63 +431,60 @@ ACTION: DEFECT
                              opponent_name: str,
                              game_desc: str) -> str:
         """Hybrid 模式提示 - 代码预处理统计"""
-
+        self.current_round = len(my_history) + 1
         rounds_played = len(opponent_history)
 
         if rounds_played == 0:
-            stats_str = "This is the first round. No history yet."
+            my_coop_rate_str = "0%"
+            opp_coop_rate_str = "N/A"
+            history_summary = "No history yet (first round)"
         else:
-            # 应用历史窗口限制
             window = self.history_window if self.history_window else rounds_played
             windowed_opp = opponent_history[-window:]
             windowed_my = my_history[-window:]
             window_size = len(windowed_opp)
 
-            # 计算对手统计（窗口内）- 使用辅助函数兼容字符串和枚举
             opp_coop = sum(1 for a in windowed_opp if self._get_action_value(a) == "cooperate")
             opp_coop_rate = opp_coop / window_size
-
-            # 最近趋势
-            recent = windowed_opp[-5:] if len(windowed_opp) >= 5 else windowed_opp
-            recent_coop = sum(1 for a in recent if self._get_action_value(a) == "cooperate")
-            recent_rate = recent_coop / len(recent)
-
-            # 我的统计（窗口内）
             my_coop = sum(1 for a in windowed_my if self._get_action_value(a) == "cooperate")
             my_coop_rate = my_coop / window_size if window_size > 0 else 0
 
-            # 获取最后动作的字符串值
-            last_action = self._get_action_value(opponent_history[-1]) if opponent_history else 'N/A'
+            my_coop_rate_str = f"{my_coop_rate:.0%}"
+            opp_coop_rate_str = f"{opp_coop_rate:.0%} ({opp_coop}/{window_size})"
 
-            window_info = f" (window: last {window} rounds)" if self.history_window else ""
+            window_info = f" (last {window} rounds)" if self.history_window else ""
+            last_action = self._get_action_value(opponent_history[-1])
+            history_summary = f"Rounds: {rounds_played}{window_info}, Last opponent action: {last_action}"
 
-            stats_str = f"""
-Rounds played: {rounds_played}{window_info}
+        template = _load_template("strategy_select")
+        return template.format(
+            opponent_name=opponent_name,
+            game_desc=game_desc,
+            current_round=self.current_round,
+            total_payoff=f"{self.total_payoff:.1f}",
+            my_coop_rate=my_coop_rate_str,
+            opp_coop_rate=opp_coop_rate_str,
+            opp_pattern=self._analyze_pattern(opponent_history),
+            history_summary=history_summary,
+        )
 
-Opponent Statistics:
-- Overall cooperation rate: {opp_coop_rate:.1%} ({opp_coop}/{window_size})
-- Recent 5 rounds cooperation: {recent_rate:.1%}
-- Last action: {last_action}
+    def _analyze_pattern(self, opponent_history: List) -> str:
+        """分析对手行为模式"""
+        if len(opponent_history) < 3:
+            return "Not enough data"
 
-Your Statistics:
-- Your cooperation rate: {my_coop_rate:.1%}
-- Your total payoff so far: {self.total_payoff:.1f}
-"""
+        recent = opponent_history[-10:] if len(opponent_history) >= 10 else opponent_history
+        coop_count = sum(1 for a in recent if self._get_action_value(a) == "cooperate")
+        coop_rate = coop_count / len(recent)
 
-        prompt = f"""You are playing an iterated game against {opponent_name}.
-
-{game_desc}
-
-{stats_str}
-
-Based on this analysis, decide your action.
-
-IMPORTANT: End your response with exactly one of these formats:
-ACTION: COOPERATE
-or
-ACTION: DEFECT
-"""
-        return prompt
+        if coop_rate >= 0.8:
+            return "Highly cooperative"
+        elif coop_rate >= 0.5:
+            return "Mixed/Conditional cooperator"
+        elif coop_rate >= 0.2:
+            return "Mostly defects"
+        else:
+            return "Always defects"
 
     def _format_history(self, my_history: List, opponent_history: List) -> str:
         """格式化历史记录"""
