@@ -1,5 +1,5 @@
 """
-博弈论 LLM 多智能体研究实验脚本 v7
+博弈论 LLM 多智能体研究实验脚本 v8
 Game Theory LLM Multi-Agent Research Experiments
 
 实验列表:
@@ -928,23 +928,28 @@ def _print_cheap_talk_summary(results: Dict):
 # ============================================================
 
 def experiment_group_dynamics(
-    result_manager: ResultManager,
-    n_agents: int = 10,
-    provider: str = DEFAULT_CONFIG["provider"],
-    rounds: int = DEFAULT_CONFIG["rounds"],
-    games: List[str] = None,
-    networks: List[str] = None,
+        result_manager: ResultManager,
+        n_agents: int = 10,
+        provider: str = DEFAULT_CONFIG["provider"],
+        n_repeats: int = DEFAULT_CONFIG["n_repeats"],  # <--- [新增] 重复次数参数
+        rounds: int = DEFAULT_CONFIG["rounds"],
+        games: List[str] = None,
+        networks: List[str] = None,
 ) -> Dict:
-    """群体动力学实验（单 Provider）"""
+    """
+    群体动力学实验（单 Provider）
+
+    修复版：支持动态 n_agents，支持 n_repeats 重复实验取平均
+    """
 
     if games is None:
         games = list(GAME_REGISTRY.keys())
     if networks is None:
         networks = ["fully_connected", "small_world"]
 
-    print_separator("实验5: 群体动力学")
-    print(f"Agent数量: {n_agents} | 网络: {networks}")
-    print(f"Provider: {provider} | Rounds: {rounds}")
+    print_separator("实验5: 群体动力学 (单 Provider)")
+    print(f"Agent数量: {n_agents} | Provider: {provider}")
+    print(f"网络: {networks} | Repeats: {n_repeats} | Rounds: {rounds}")
 
     all_results = {}
 
@@ -959,54 +964,76 @@ def experiment_group_dynamics(
             print(f"\n  网络: {network_cn}")
 
             try:
-                # 先创建策略和 agent 名称
-                strategies = [
-                    ("LLM_1", LLMStrategy(provider=provider, mode="hybrid", game_config=game_config)),
-                    ("LLM_2", LLMStrategy(provider=provider, mode="hybrid", game_config=game_config)),
-                    ("TFT_1", TitForTat()),
-                    ("TFT_2", TitForTat()),
-                    ("AC_1", AlwaysCooperate()),
-                    ("AD_1", AlwaysDefect()),
-                    ("Pavlov_1", Pavlov()),
-                    ("Grim_1", GrimTrigger()),
-                    ("Random_1", RandomStrategy()),
-                    ("Random_2", RandomStrategy()),
-                ]
+                # 用于存储所有重复实验的数据
+                all_trials_payoffs = defaultdict(list)
+                all_trials_coop_rates = defaultdict(list)
 
-                # 取前 n_agents 个
-                selected = strategies[:n_agents]
-                agent_names = [name for name, _ in selected]
+                # === 核心循环：执行 n_repeats 次 ===
+                for i in range(n_repeats):
+                    print(f"    Repeat {i + 1}/{n_repeats}...", end=" ", flush=True)
 
-                # 创建网络（传入 agent 名称列表）
-                NetworkClass = NETWORK_REGISTRY[network_name]
-                network = NetworkClass(agent_names)
+                    # 1. 动态生成策略列表 (每次循环重新生成，确保状态重置)
+                    strategies = []
 
-                # 创建 agents 字典
-                agents = {}
-                for name, strategy in selected:
-                    agents[name] = AgentState(name=name, strategy=strategy)
+                    # 设定 LLM 数量 (至少2个，或占20%)
+                    n_llm = max(2, int(n_agents * 0.2))
+                    n_classic = n_agents - n_llm
 
-                sim = GameSimulation(
-                    agents=agents,
-                    network=network,
-                    game_config=game_config,
-                    rounds=rounds,
-                    verbose=False
-                )
+                    # 创建 LLM Agents
+                    for k in range(n_llm):
+                        strategies.append((
+                            f"LLM_{k + 1}",
+                            LLMStrategy(provider=provider, mode="hybrid", game_config=game_config)
+                        ))
 
-                print(f"    运行 {rounds} 轮仿真...", flush=True)
-                sim.run()
+                    # 创建传统策略 Agents
+                    classic_classes = [
+                        TitForTat, AlwaysCooperate, AlwaysDefect,
+                        Pavlov, GrimTrigger, RandomStrategy
+                    ]
+                    for k in range(n_classic):
+                        StrategyClass = classic_classes[k % len(classic_classes)]
+                        strategies.append((
+                            f"{StrategyClass.__name__}_{k + 1}",
+                            StrategyClass()
+                        ))
 
-                final_payoffs = {aid: agent.total_payoff for aid, agent in agents.items()}
-                coop_rates = {}
-                for aid, agent in agents.items():
-                    # game_history 格式: [{"my_action": "cooperate", ...}, ...]
-                    history = agent.game_history
-                    if history:
-                        actions = [Action(h["my_action"]) for h in history]
-                        coop_rates[aid] = compute_cooperation_rate(actions)
-                    else:
-                        coop_rates[aid] = 0.0
+                    # 2. 运行仿真
+                    agent_names = [name for name, _ in strategies]
+                    NetworkClass = NETWORK_REGISTRY[network_name]
+                    network = NetworkClass(agent_names)
+
+                    agents = {}
+                    for name, strategy in strategies:
+                        agents[name] = AgentState(name=name, strategy=strategy)
+
+                    sim = GameSimulation(
+                        agents=agents,
+                        network=network,
+                        game_config=game_config,
+                        rounds=rounds,
+                        verbose=False
+                    )
+
+                    sim.run()
+
+                    # 3. 收集单次数据
+                    for aid, agent in agents.items():
+                        all_trials_payoffs[aid].append(agent.total_payoff)
+
+                        history = agent.game_history
+                        if history:
+                            actions = [Action(h["my_action"]) for h in history]
+                            rate = compute_cooperation_rate(actions)
+                        else:
+                            rate = 0.0
+                        all_trials_coop_rates[aid].append(rate)
+
+                    print("Done")
+
+                # 4. 计算平均值
+                final_payoffs = {k: np.mean(v) for k, v in all_trials_payoffs.items()}
+                coop_rates = {k: np.mean(v) for k, v in all_trials_coop_rates.items()}
 
                 network_results[network_name] = {
                     "payoffs": final_payoffs,
@@ -1014,21 +1041,22 @@ def experiment_group_dynamics(
                     "rankings": sorted(final_payoffs.items(), key=lambda x: x[1], reverse=True),
                 }
 
-                print(f"    排名:")
+                # 打印前 5 名
+                print(f"    🏆 平均排名 (Top 5):")
                 for rank, (aid, payoff) in enumerate(network_results[network_name]["rankings"][:5], 1):
                     coop = coop_rates.get(aid, 0)
-                    print(f"      {rank}. {aid}: {payoff:.1f} (合作率: {coop:.1%})")
+                    marker = "🤖" if aid.startswith("LLM") else "👤"
+                    print(f"      {marker} {rank}. {aid}: {payoff:.1f} (合作率: {coop:.1%})")
 
             except Exception as e:
-                print(f"    错误: {e}")
+                print(f"    ❌ 错误: {e}")
+                import traceback
+                traceback.print_exc()
                 network_results[network_name] = {"error": str(e)}
 
         all_results[game_name] = network_results
-
-        # 保存结果
         result_manager.save_json(game_name, "group_dynamics", network_results)
 
-        # 生成排名图表
         fig = _plot_group_rankings(network_results, game_name)
         if fig:
             result_manager.save_figure(game_name, "group_dynamics", fig)
@@ -1037,16 +1065,18 @@ def experiment_group_dynamics(
 
 
 def experiment_group_dynamics_multi_provider(
-    result_manager: ResultManager,
-    providers: List[str] = None,
-    rounds: int = DEFAULT_CONFIG["rounds"],
-    games: List[str] = None,
-    networks: List[str] = None,
+        result_manager: ResultManager,
+        n_agents: int = 10,
+        providers: List[str] = None,
+        n_repeats: int = DEFAULT_CONFIG["n_repeats"],  # <--- [新增] 重复次数参数
+        rounds: int = DEFAULT_CONFIG["rounds"],
+        games: List[str] = None,
+        networks: List[str] = None,
 ) -> Dict:
     """
     群体动力学实验（多 Provider 对比）
 
-    不同 LLM Provider 在同一群体中互动竞争
+    修复版：支持动态 n_agents，支持 n_repeats 重复实验取平均
     """
 
     if providers is None:
@@ -1057,8 +1087,8 @@ def experiment_group_dynamics_multi_provider(
         networks = ["fully_connected", "small_world"]
 
     print_separator("实验5b: 多 Provider 群体动力学")
-    print(f"LLM Providers: {providers}")
-    print(f"网络: {networks} | Rounds: {rounds}")
+    print(f"Agent数量: {n_agents} | Providers: {providers}")
+    print(f"网络: {networks} | Repeats: {n_repeats} | Rounds: {rounds}")
 
     all_results = {}
 
@@ -1073,57 +1103,87 @@ def experiment_group_dynamics_multi_provider(
             print(f"\n  网络: {network_cn}")
 
             try:
-                # 为每个 provider 创建 LLM agent
-                strategies = []
-                for provider in providers:
-                    strategies.append(
-                        (f"LLM_{provider}", LLMStrategy(provider=provider, mode="hybrid", game_config=game_config))
+                # 用于存储所有重复实验的数据
+                all_trials_payoffs = defaultdict(list)
+                all_trials_coop_rates = defaultdict(list)
+
+                # === 核心循环：执行 n_repeats 次 ===
+                for i in range(n_repeats):
+                    print(f"    Repeat {i + 1}/{n_repeats}...", end=" ", flush=True)
+
+                    # 1. 动态生成策略列表
+                    strategies = []
+
+                    # 设定 LLM 总数
+                    min_llms = len(providers)
+                    n_llm_total = max(min_llms, int(n_agents * 0.2))
+                    n_classic = n_agents - n_llm_total
+
+                    # 均匀分配 Provider
+                    base_count = n_llm_total // len(providers)
+                    remainder = n_llm_total % len(providers)
+                    llm_counts = [base_count + 1 if k < remainder else base_count for k in range(len(providers))]
+
+                    # 创建 LLM Agents
+                    current_llm_idx = 1
+                    for provider, count in zip(providers, llm_counts):
+                        for _ in range(count):
+                            strategies.append((
+                                f"LLM_{provider}_{current_llm_idx}",
+                                LLMStrategy(provider=provider, mode="hybrid", game_config=game_config)
+                            ))
+                            current_llm_idx += 1
+
+                    # 创建传统策略 Agents
+                    classic_classes = [
+                        TitForTat, AlwaysCooperate, AlwaysDefect,
+                        Pavlov, GrimTrigger, RandomStrategy
+                    ]
+                    for k in range(n_classic):
+                        StrategyClass = classic_classes[k % len(classic_classes)]
+                        strategies.append((
+                            f"{StrategyClass.__name__}_{k + 1}",
+                            StrategyClass()
+                        ))
+
+                    # 2. 运行仿真
+                    agent_names = [name for name, _ in strategies]
+                    NetworkClass = NETWORK_REGISTRY[network_name]
+                    network = NetworkClass(agent_names)
+
+                    agents = {}
+                    for name, strategy in strategies:
+                        agents[name] = AgentState(name=name, strategy=strategy)
+
+                    sim = GameSimulation(
+                        agents=agents,
+                        network=network,
+                        game_config=game_config,
+                        rounds=rounds,
+                        verbose=False
                     )
 
-                # 添加传统策略
-                strategies.extend([
-                    ("TFT_1", TitForTat()),
-                    ("TFT_2", TitForTat()),
-                    ("AC_1", AlwaysCooperate()),
-                    ("AD_1", AlwaysDefect()),
-                    ("Pavlov_1", Pavlov()),
-                    ("Grim_1", GrimTrigger()),
-                    ("Random_1", RandomStrategy()),
-                ])
+                    sim.run()
 
-                agent_names = [name for name, _ in strategies]
+                    # 3. 收集单次数据
+                    for aid, agent in agents.items():
+                        all_trials_payoffs[aid].append(agent.total_payoff)
 
-                # 创建网络
-                NetworkClass = NETWORK_REGISTRY[network_name]
-                network = NetworkClass(agent_names)
+                        history = agent.game_history
+                        if history:
+                            actions = [Action(h["my_action"]) for h in history]
+                            rate = compute_cooperation_rate(actions)
+                        else:
+                            rate = 0.0
+                        all_trials_coop_rates[aid].append(rate)
 
-                # 创建 agents 字典
-                agents = {}
-                for name, strategy in strategies:
-                    agents[name] = AgentState(name=name, strategy=strategy)
+                    print("Done")
 
-                sim = GameSimulation(
-                    agents=agents,
-                    network=network,
-                    game_config=game_config,
-                    rounds=rounds,
-                    verbose=False
-                )
+                # 4. 计算平均值
+                final_payoffs = {k: np.mean(v) for k, v in all_trials_payoffs.items()}
+                coop_rates = {k: np.mean(v) for k, v in all_trials_coop_rates.items()}
 
-                print(f"    运行 {rounds} 轮仿真...", flush=True)
-                sim.run()
-
-                final_payoffs = {aid: agent.total_payoff for aid, agent in agents.items()}
-                coop_rates = {}
-                for aid, agent in agents.items():
-                    history = agent.game_history
-                    if history:
-                        actions = [Action(h["my_action"]) for h in history]
-                        coop_rates[aid] = compute_cooperation_rate(actions)
-                    else:
-                        coop_rates[aid] = 0.0
-
-                # 分类统计 LLM vs 传统策略
+                # 分类统计
                 llm_results = {k: v for k, v in final_payoffs.items() if k.startswith("LLM_")}
                 traditional_results = {k: v for k, v in final_payoffs.items() if not k.startswith("LLM_")}
 
@@ -1135,30 +1195,21 @@ def experiment_group_dynamics_multi_provider(
                     "traditional_comparison": traditional_results,
                 }
 
-                print(f"    🤖 LLM 排名:")
+                print(f"    🤖 LLM 平均排名 (Top 5):")
                 llm_ranked = sorted(llm_results.items(), key=lambda x: x[1], reverse=True)
-                for rank, (aid, payoff) in enumerate(llm_ranked, 1):
+                for rank, (aid, payoff) in enumerate(llm_ranked[:5], 1):
                     coop = coop_rates.get(aid, 0)
                     print(f"      {rank}. {aid}: {payoff:.1f} (合作率: {coop:.1%})")
 
-                print(f"    📊 整体前 5:")
-                for rank, (aid, payoff) in enumerate(network_results[network_name]["rankings"][:5], 1):
-                    coop = coop_rates.get(aid, 0)
-                    marker = "🤖" if aid.startswith("LLM_") else "  "
-                    print(f"      {marker} {rank}. {aid}: {payoff:.1f} (合作率: {coop:.1%})")
-
             except Exception as e:
-                print(f"    错误: {e}")
+                print(f"    ❌ 错误: {e}")
                 import traceback
                 traceback.print_exc()
                 network_results[network_name] = {"error": str(e)}
 
         all_results[game_name] = network_results
-
-        # 保存结果
         result_manager.save_json(game_name, "group_dynamics_multi_provider", network_results)
 
-        # 生成对比图表
         fig = _plot_multi_provider_comparison(network_results, game_name, providers)
         if fig:
             result_manager.save_figure(game_name, "group_dynamics_multi_provider", fig)
@@ -1455,7 +1506,7 @@ def print_usage():
 ==========================
 
 用法:
-  python run_research_experiment.py <experiment> [options]
+  python research.py <experiment> [options]
 
 实验列表:
   pure_hybrid   - 实验1: Pure vs Hybrid LLM
@@ -1485,15 +1536,16 @@ def print_usage():
   └── stag_hunt/
 
 示例:
-  python run_research_experiment.py pure_hybrid
-  python run_research_experiment.py group_multi --rounds 30
-  python run_research_experiment.py all --provider openai --repeats 5
-  python run_research_experiment.py baseline --games pd
+  python research.py pure_hybrid
+  python research.py group_multi --rounds 30
+  python research.py all --provider openai --repeats 5
+  python research.py baseline --games pd
 """)
 
 
 def main():
     # 默认跑全部实验
+
     if len(sys.argv) < 2:
         experiment = "all"
         print("未指定实验，默认运行全部实验...")
@@ -1510,6 +1562,7 @@ def main():
     n_repeats = DEFAULT_CONFIG["n_repeats"]
     rounds = DEFAULT_CONFIG["rounds"]
     games = None
+    n_agents = 10
 
     i = 2
     while i < len(sys.argv):
@@ -1521,6 +1574,9 @@ def main():
             i += 2
         elif sys.argv[i] == "--rounds" and i + 1 < len(sys.argv):
             rounds = int(sys.argv[i + 1])
+            i += 2
+        elif sys.argv[i] == "--n_agents" and i + 1 < len(sys.argv):
+            n_agents = int(sys.argv[i + 1])
             i += 2
         elif sys.argv[i] == "--games" and i + 1 < len(sys.argv):
             game_arg = sys.argv[i + 1].lower()
@@ -1583,6 +1639,8 @@ def main():
         # 群体动力学实验默认使用三模型
         results = experiment_group_dynamics_multi_provider(
             result_manager,
+            n_agents=n_agents,
+            n_repeats=n_repeats,
             providers=["deepseek", "openai", "claude"],
             rounds=rounds,
             games=games
@@ -1593,6 +1651,8 @@ def main():
         # 单 Provider 群体动力学实验
         results = experiment_group_dynamics(
             result_manager,
+            n_agents=n_agents,
+            n_repeats=n_repeats,
             provider=provider,
             rounds=rounds,
             games=games
