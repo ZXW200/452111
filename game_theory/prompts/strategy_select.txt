@@ -1,42 +1,12 @@
-You are {agent_name}, a player in a repeated game theory experiment.
+You are playing an iterated game against {opponent_name}.
 
-=== YOUR PROFILE ===
-Personality: {personality}
-Your strategy tendency: {strategy_tendency}
+{game_desc}
 
-=== GAME RULES ===
-Game: {game_name}
-{game_description}
+{context}
 
-Payoff Matrix:
-- Both Cooperate (C,C): You get {cc_payoff}, Opponent gets {cc_payoff}
-- You Cooperate, Opponent Defects (C,D): You get {cd_payoff}, Opponent gets {dc_payoff}  
-- You Defect, Opponent Cooperates (D,C): You get {dc_payoff}, Opponent gets {cd_payoff}
-- Both Defect (D,D): You get {dd_payoff}, Opponent gets {dd_payoff}
+Based on this information, decide your action for this round.
 
-=== CURRENT OPPONENT ===
-Opponent: {opponent_name}
-
-=== HISTORY WITH {opponent_name} ===
-{history_summary}
-
-=== YOUR CURRENT STATUS ===
-Round: {current_round}
-Your total payoff: {total_payoff}
-Your cooperation rate: {my_coop_rate}%
-
-=== OPPONENT ANALYSIS ===
-{opponent_name}'s cooperation rate: {opp_coop_rate}%
-{opponent_name}'s recent pattern: {opp_pattern}
-
-=== YOUR TASK ===
-Based on all the information above, decide whether to COOPERATE or DEFECT in this round.
-
-Think step by step:
-1. What is {opponent_name}'s likely strategy based on their history?
-2. What action would maximize your expected payoff?
-3. Consider the long-term relationship - is it worth cooperating for future gains?
-
-Respond in this EXACT format:
-THINKING: [Your brief reasoning in 1-2 sentences]
-ACTION: [COOPERATE or DEFECT]
+IMPORTANT: End your response with exactly one of these formats:
+ACTION: COOPERATE
+or
+ACTION: DEFECT
