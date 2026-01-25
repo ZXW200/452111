@@ -172,6 +172,33 @@ class ResultManager:
 
         return filepath
 
+    def save_round_records(self, experiment_name: str, game_name: str, provider: str, records: List[Dict]) -> str:
+        """
+        保存每轮记录到单个文件
+
+        Args:
+            experiment_name: 实验名称
+            game_name: 博弈类型
+            provider: LLM提供商
+            records: 每轮记录列表
+        """
+        filename = f"{experiment_name}_{game_name}_{provider}_rounds.json"
+        filepath = os.path.join(self.details_dir, filename)
+
+        data = {
+            "experiment": experiment_name,
+            "game": game_name,
+            "provider": provider,
+            "total_records": len(records),
+            "records": records,
+        }
+
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2, default=str)
+
+        print(f"  Rounds: {filepath}")
+        return filepath
+
     def save_experiment_summary(self, experiment_name: str, data: Dict) -> str:
         """保存实验汇总到 summary 目录 (CSV 格式)"""
         filepath = os.path.join(self.summary_dir, f"{experiment_name}.csv")
@@ -423,6 +450,7 @@ def experiment_pure_vs_hybrid(
 
         results = {"pure": [], "hybrid": []}
         coop_rates = {"pure": [], "hybrid": []}
+        all_round_records = []  # 收集所有轮次记录
 
         for mode in ["pure", "hybrid"]:
             print(f"\n  Mode: {mode.upper()}")
@@ -449,6 +477,19 @@ def experiment_pure_vs_hybrid(
 
                         payoff, _ = get_payoff(game_config, llm_action, opp_action)
                         llm_payoff += payoff
+
+                        # 记录每轮数据
+                        llm_response = llm_strategy.raw_responses[-1] if llm_strategy.raw_responses else ""
+                        all_round_records.append({
+                            "mode": mode,
+                            "trial": trial + 1,
+                            "round": r + 1,
+                            "llm_response": llm_response,
+                            "llm_action": llm_action.name,
+                            "opp_action": opp_action.name,
+                            "payoff": payoff,
+                            "cumulative_payoff": llm_payoff,
+                        })
 
                         llm_history.append(llm_action)
                         opp_history.append(opp_action)
@@ -505,6 +546,9 @@ def experiment_pure_vs_hybrid(
 
         # 保存当前博弈结果
         result_manager.save_json(game_name, "pure_vs_hybrid", game_results)
+
+        # 保存每轮记录
+        result_manager.save_round_records("pure_vs_hybrid", game_name, provider, all_round_records)
 
         # 生成并保存图表
         fig = plot_cooperation_comparison(game_results, "Pure vs Hybrid", game_name)
@@ -569,6 +613,7 @@ def experiment_memory_window(
         print_game_header(game_name)
 
         window_results = {}
+        all_round_records = []  # 收集所有轮次记录
 
         for window in windows:
             window_label = str(window) if window else "全部"
@@ -601,27 +646,25 @@ def experiment_memory_window(
                         payoff, _ = get_payoff(game_config, llm_action, opp_action)
                         llm_payoff += payoff
 
+                        # 记录每轮数据
+                        llm_response = llm_strategy.raw_responses[-1] if llm_strategy.raw_responses else ""
+                        all_round_records.append({
+                            "window": window_label,
+                            "trial": trial + 1,
+                            "round": r + 1,
+                            "llm_response": llm_response,
+                            "llm_action": llm_action.name,
+                            "opp_action": opp_action.name,
+                            "payoff": payoff,
+                            "cumulative_payoff": llm_payoff,
+                        })
+
                         llm_history.append(llm_action)
                         opp_history.append(opp_action)
 
                     coop_rate = compute_cooperation_rate(llm_history)
                     payoffs.append(llm_payoff)
                     coop_rates.append(coop_rate)
-
-                    # 保存详细数据（包含LLM思考过程）
-                    detail_data = {
-                        "experiment": "memory_window",
-                        "game": game_name,
-                        "window": window,
-                        "trial": trial + 1,
-                        "rounds": rounds,
-                        "payoff": llm_payoff,
-                        "coop_rate": coop_rate,
-                        "llm_history": [a.name for a in llm_history],
-                        "opp_history": [a.name for a in opp_history],
-                        "llm_responses": llm_strategy.raw_responses.copy(),  # LLM思考过程
-                    }
-                    result_manager.save_detail(f"memory_window_{game_name}_w{window_label}", provider, trial + 1, rounds, detail_data)
 
                     print(f"Payoff: {llm_payoff:.1f}, Coop rate: {coop_rate:.1%}")
 
@@ -638,6 +681,9 @@ def experiment_memory_window(
 
         # 保存结果
         result_manager.save_json(game_name, "memory_window", window_results)
+
+        # 保存每轮记录
+        result_manager.save_round_records("memory_window", game_name, provider, all_round_records)
 
         # 生成图表
         fig = plot_cooperation_comparison(window_results, "记忆视窗对比", game_name)
@@ -696,6 +742,7 @@ def experiment_multi_llm(
         print_game_header(game_name)
 
         provider_results = {}
+        all_round_records = []  # 收集所有轮次记录
 
         for provider in providers:
             print(f"\n  Provider: {provider.upper()}")
@@ -726,27 +773,25 @@ def experiment_multi_llm(
                         payoff, _ = get_payoff(game_config, llm_action, opp_action)
                         llm_payoff += payoff
 
+                        # 记录每轮数据
+                        llm_response = llm_strategy.raw_responses[-1] if llm_strategy.raw_responses else ""
+                        all_round_records.append({
+                            "provider": provider,
+                            "trial": trial + 1,
+                            "round": r + 1,
+                            "llm_response": llm_response,
+                            "llm_action": llm_action.name,
+                            "opp_action": opp_action.name,
+                            "payoff": payoff,
+                            "cumulative_payoff": llm_payoff,
+                        })
+
                         llm_history.append(llm_action)
                         opp_history.append(opp_action)
 
                     coop_rate = compute_cooperation_rate(llm_history)
                     payoffs.append(llm_payoff)
                     coop_rates.append(coop_rate)
-
-                    # 保存详细数据（包含LLM思考过程）
-                    detail_data = {
-                        "experiment": "multi_llm",
-                        "game": game_name,
-                        "provider": provider,
-                        "trial": trial + 1,
-                        "rounds": rounds,
-                        "payoff": llm_payoff,
-                        "coop_rate": coop_rate,
-                        "llm_history": [a.name for a in llm_history],
-                        "opp_history": [a.name for a in opp_history],
-                        "llm_responses": llm_strategy.raw_responses.copy(),  # LLM思考过程
-                    }
-                    result_manager.save_detail(f"multi_llm_{game_name}", provider, trial + 1, rounds, detail_data)
 
                     print(f"Payoff: {llm_payoff:.1f}, Coop rate: {coop_rate:.1%}")
 
@@ -763,6 +808,9 @@ def experiment_multi_llm(
 
         # 保存结果
         result_manager.save_json(game_name, "multi_llm", provider_results)
+
+        # 保存每轮记录
+        result_manager.save_round_records("multi_llm", game_name, "all", all_round_records)
 
         # 生成图表
         fig = plot_cooperation_comparison(provider_results, "多 LLM 对比", game_name)
@@ -829,6 +877,7 @@ def experiment_cheap_talk(
         results = {"no_talk": [], "cheap_talk": []}
         coop_rates = {"no_talk": [], "cheap_talk": []}
         promise_kept = []
+        all_round_records = []  # 收集所有轮次记录
 
         # 详细记录：保存每轮的 message 和 action
         detailed_trials = {"no_talk": [], "cheap_talk": []}
@@ -875,6 +924,7 @@ def experiment_cheap_talk(
                         opp_history.append(opp_action)
 
                         # 保存本轮详细记录
+                        llm_response = llm_strategy.raw_responses[-1] if llm_strategy.raw_responses else ""
                         round_details.append({
                             "round": r + 1,
                             "message": message,
@@ -882,6 +932,19 @@ def experiment_cheap_talk(
                             "opponent_action": opp_action.name,
                             "llm_payoff": payoff,
                             "opponent_payoff": opp_payoff,
+                            "cumulative_payoff": llm_payoff,
+                        })
+
+                        # 记录到总记录
+                        all_round_records.append({
+                            "mode": mode,
+                            "trial": trial + 1,
+                            "round": r + 1,
+                            "message": message,
+                            "llm_response": llm_response,
+                            "llm_action": llm_action.name,
+                            "opp_action": opp_action.name,
+                            "payoff": payoff,
                             "cumulative_payoff": llm_payoff,
                         })
 
@@ -943,16 +1006,8 @@ def experiment_cheap_talk(
         # 保存统计结果
         result_manager.save_json(game_name, "cheap_talk", game_results)
 
-        # 保存详细记录（JSON 格式）
-        detailed_data = {
-            "game": game_name,
-            "provider": provider,
-            "n_repeats": n_repeats,
-            "rounds": rounds,
-            "opponent": "TitForTat",
-            "trials": detailed_trials,
-        }
-        result_manager.save_json(game_name, "cheap_talk_details", detailed_data)
+        # 保存每轮记录
+        result_manager.save_round_records("cheap_talk", game_name, provider, all_round_records)
 
         # 生成易读的 transcript 文本文件
         transcript = _generate_cheap_talk_transcript(game_name, provider, detailed_trials)
@@ -1118,6 +1173,7 @@ def experiment_group_dynamics(
         print_game_header(game_name)
 
         network_results = {}
+        all_round_records = []  # 收集所有轮次记录
 
         for network_name in networks:
             network_cn = NETWORK_NAMES_CN.get(network_name, network_name)
@@ -1198,19 +1254,23 @@ def experiment_group_dynamics(
                         if hasattr(agent.strategy, 'raw_responses'):
                             llm_responses[aid] = agent.strategy.raw_responses.copy()
 
-                    # 保存详细数据（包含LLM思考过程）
-                    detail_data = {
-                        "experiment": "group_dynamics",
-                        "game": game_name,
-                        "network": network_name,
-                        "trial": i + 1,
-                        "rounds": rounds,
-                        "n_agents": n_agents,
-                        "payoffs": trial_payoffs,
-                        "coop_rates": trial_coop_rates,
-                        "llm_responses": llm_responses,  # 各LLM智能体的思考过程
-                    }
-                    result_manager.save_detail(f"group_{game_name}_{network_name}", provider, i + 1, rounds, detail_data)
+                    # 构建每轮记录
+                    for aid, agent in agents.items():
+                        if hasattr(agent.strategy, 'raw_responses') and agent.game_history:
+                            responses = agent.strategy.raw_responses
+                            for r_idx, hist in enumerate(agent.game_history):
+                                llm_response = responses[r_idx] if r_idx < len(responses) else ""
+                                all_round_records.append({
+                                    "network": network_name,
+                                    "trial": i + 1,
+                                    "round": r_idx + 1,
+                                    "agent": aid,
+                                    "llm_response": llm_response,
+                                    "my_action": hist.get("my_action", ""),
+                                    "opponent": hist.get("opponent", ""),
+                                    "opp_action": hist.get("opp_action", ""),
+                                    "payoff": hist.get("payoff", 0),
+                                })
 
                     print("Done")
 
@@ -1239,6 +1299,9 @@ def experiment_group_dynamics(
 
         all_results[game_name] = network_results
         result_manager.save_json(game_name, "group_dynamics", network_results)
+
+        # 保存每轮记录
+        result_manager.save_round_records("group_dynamics", game_name, provider, all_round_records)
 
         fig = _plot_group_rankings(network_results, game_name)
         if fig:
@@ -1283,6 +1346,7 @@ def experiment_group_dynamics_multi_provider(
         print_game_header(game_name)
 
         network_results = {}
+        all_round_records = []  # 收集所有轮次记录
 
         for network_name in networks:
             network_cn = NETWORK_NAMES_CN.get(network_name, network_name)
@@ -1372,6 +1436,24 @@ def experiment_group_dynamics_multi_provider(
                         if hasattr(agent.strategy, 'raw_responses'):
                             llm_responses[aid] = agent.strategy.raw_responses.copy()
 
+                    # 构建每轮记录
+                    for aid, agent in agents.items():
+                        if hasattr(agent.strategy, 'raw_responses') and agent.game_history:
+                            responses = agent.strategy.raw_responses
+                            for r_idx, hist in enumerate(agent.game_history):
+                                llm_response = responses[r_idx] if r_idx < len(responses) else ""
+                                all_round_records.append({
+                                    "network": network_name,
+                                    "trial": i + 1,
+                                    "round": r_idx + 1,
+                                    "agent": aid,
+                                    "llm_response": llm_response,
+                                    "my_action": hist.get("my_action", ""),
+                                    "opponent": hist.get("opponent", ""),
+                                    "opp_action": hist.get("opp_action", ""),
+                                    "payoff": hist.get("payoff", 0),
+                                })
+
                     # 保存详细数据（包含LLM思考过程）
                     detail_data = {
                         "experiment": "group_dynamics_multi",
@@ -1419,6 +1501,9 @@ def experiment_group_dynamics_multi_provider(
 
         all_results[game_name] = network_results
         result_manager.save_json(game_name, "group_dynamics_multi_provider", network_results)
+
+        # 保存每轮记录
+        result_manager.save_round_records("group_dynamics_multi", game_name, "multi", all_round_records)
 
         fig = _plot_multi_provider_comparison(network_results, game_name, providers)
         if fig:
@@ -1562,6 +1647,7 @@ def experiment_baseline_comparison(
         print_game_header(game_name)
 
         game_results = {}
+        all_round_records = []  # 收集所有轮次记录
 
         for provider in providers:
             print(f"\n  Provider: {provider.upper()}")
@@ -1596,6 +1682,20 @@ def experiment_baseline_comparison(
 
                             payoff, _ = get_payoff(game_config, llm_action, opp_action)
                             llm_payoff += payoff
+
+                            # 记录每轮数据
+                            llm_response = llm_strategy.raw_responses[-1] if llm_strategy.raw_responses else ""
+                            all_round_records.append({
+                                "provider": provider,
+                                "baseline": baseline_name,
+                                "trial": trial + 1,
+                                "round": r + 1,
+                                "llm_response": llm_response,
+                                "llm_action": llm_action.name,
+                                "opp_action": opp_action.name,
+                                "payoff": payoff,
+                                "cumulative_payoff": llm_payoff,
+                            })
 
                             llm_history.append(llm_action)
                             opp_history.append(opp_action)
@@ -1637,6 +1737,9 @@ def experiment_baseline_comparison(
 
         # 保存结果
         result_manager.save_json(game_name, "baseline", game_results)
+
+        # 保存每轮记录
+        result_manager.save_round_records("baseline", game_name, "all", all_round_records)
 
         # 生成图表
         fig = _plot_baseline_multi_provider(game_results, game_name, providers, baselines)
