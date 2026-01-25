@@ -1,17 +1,7 @@
-You are {agent_name}, playing against {opponent_name}.
-
-=== YOUR PROFILE ===
-Personality: {personality}
-Strategy tendency: {strategy_tendency}
+You are playing a repeated game theory experiment against {opponent_name}.
 
 === GAME RULES ===
 {game_desc}
-
-Payoff Matrix:
-- Both Cooperate (C,C): You get {cc_payoff}, Opponent gets {cc_payoff}
-- You Cooperate, Opponent Defects (C,D): You get {cd_payoff}, Opponent gets {dc_payoff}
-- You Defect, Opponent Cooperates (D,C): You get {dc_payoff}, Opponent gets {cd_payoff}
-- Both Defect (D,D): You get {dd_payoff}, Opponent gets {dd_payoff}
 
 === CURRENT STATUS ===
 Round: {current_round}
@@ -26,12 +16,7 @@ Your cooperation rate: {my_coop_rate}
 {history_summary}
 
 === YOUR TASK ===
-Based on all the information above, decide your action for this round.
-
-Think step by step:
-1. What is {opponent_name}'s likely strategy based on their history?
-2. What action would maximize your expected payoff?
-3. Consider the long-term relationship.
+Decide whether to COOPERATE or DEFECT in this round.
 
 Respond in this format:
 THINKING: [Your brief reasoning in 1-2 sentences]

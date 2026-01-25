@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 
 
 # ============================================================
-# 模板路径
+# 模板加载
 # ============================================================
 
 _TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "prompts")
@@ -418,23 +418,14 @@ class LLMStrategy:
         """Pure 模式提示 - LLM 自己分析"""
         self.current_round = len(my_history) + 1
         history_str = self._format_history(my_history, opponent_history)
-        payoffs = self._get_payoffs()
 
-        # 计算统计
         my_coop_rate = "0%" if not my_history else f"{sum(1 for a in my_history if self._get_action_value(a) == 'cooperate') / len(my_history):.0%}"
         opp_coop_rate = "N/A" if not opponent_history else f"{sum(1 for a in opponent_history if self._get_action_value(a) == 'cooperate') / len(opponent_history):.0%}"
 
         template = _load_template("strategy_select")
         return template.format(
-            agent_name=self.agent_name,
             opponent_name=opponent_name,
-            personality=self.personality,
-            strategy_tendency=self.strategy_tendency,
             game_desc=game_desc,
-            cc_payoff=payoffs["cc"],
-            cd_payoff=payoffs["cd"],
-            dc_payoff=payoffs["dc"],
-            dd_payoff=payoffs["dd"],
             current_round=self.current_round,
             total_payoff=f"{self.total_payoff:.1f}",
             my_coop_rate=my_coop_rate,
@@ -451,20 +442,17 @@ class LLMStrategy:
         """Hybrid 模式提示 - 代码预处理统计"""
         self.current_round = len(my_history) + 1
         rounds_played = len(opponent_history)
-        payoffs = self._get_payoffs()
 
         if rounds_played == 0:
             my_coop_rate_str = "0%"
             opp_coop_rate_str = "N/A"
             history_summary = "No history yet (first round)"
         else:
-            # 应用历史窗口限制
             window = self.history_window if self.history_window else rounds_played
             windowed_opp = opponent_history[-window:]
             windowed_my = my_history[-window:]
             window_size = len(windowed_opp)
 
-            # 计算统计
             opp_coop = sum(1 for a in windowed_opp if self._get_action_value(a) == "cooperate")
             opp_coop_rate = opp_coop / window_size
             my_coop = sum(1 for a in windowed_my if self._get_action_value(a) == "cooperate")
@@ -473,22 +461,14 @@ class LLMStrategy:
             my_coop_rate_str = f"{my_coop_rate:.0%}"
             opp_coop_rate_str = f"{opp_coop_rate:.0%} ({opp_coop}/{window_size})"
 
-            # 格式化历史
             window_info = f" (last {window} rounds)" if self.history_window else ""
             last_action = self._get_action_value(opponent_history[-1])
             history_summary = f"Rounds: {rounds_played}{window_info}, Last opponent action: {last_action}"
 
         template = _load_template("strategy_select")
         return template.format(
-            agent_name=self.agent_name,
             opponent_name=opponent_name,
-            personality=self.personality,
-            strategy_tendency=self.strategy_tendency,
             game_desc=game_desc,
-            cc_payoff=payoffs["cc"],
-            cd_payoff=payoffs["cd"],
-            dc_payoff=payoffs["dc"],
-            dd_payoff=payoffs["dd"],
             current_round=self.current_round,
             total_payoff=f"{self.total_payoff:.1f}",
             my_coop_rate=my_coop_rate_str,
@@ -496,6 +476,24 @@ class LLMStrategy:
             opp_pattern=self._analyze_pattern(opponent_history),
             history_summary=history_summary,
         )
+
+    def _analyze_pattern(self, opponent_history: List) -> str:
+        """分析对手行为模式"""
+        if len(opponent_history) < 3:
+            return "Not enough data"
+
+        recent = opponent_history[-10:] if len(opponent_history) >= 10 else opponent_history
+        coop_count = sum(1 for a in recent if self._get_action_value(a) == "cooperate")
+        coop_rate = coop_count / len(recent)
+
+        if coop_rate >= 0.8:
+            return "Highly cooperative"
+        elif coop_rate >= 0.5:
+            return "Mixed/Conditional cooperator"
+        elif coop_rate >= 0.2:
+            return "Mostly defects"
+        else:
+            return "Always defects"
 
     def _format_history(self, my_history: List, opponent_history: List) -> str:
         """格式化历史记录"""
@@ -530,31 +528,6 @@ class LLMStrategy:
             "dc": matrix[(self.Action.DEFECT, self.Action.COOPERATE)][0],
             "dd": matrix[(self.Action.DEFECT, self.Action.DEFECT)][0],
         }
-
-    def _analyze_pattern(self, opponent_history: List) -> str:
-        """分析对手行为模式"""
-        if len(opponent_history) < 3:
-            return "Not enough data"
-
-        recent = opponent_history[-10:] if len(opponent_history) >= 10 else opponent_history
-        coop_count = sum(1 for a in recent if self._get_action_value(a) == "cooperate")
-        coop_rate = coop_count / len(recent)
-
-        # 检测 Tit-for-Tat 模式
-        if len(opponent_history) >= 5:
-            tft_matches = 0
-            for i in range(1, min(10, len(opponent_history))):
-                # TFT: 对手模仿我上一轮的动作
-                pass  # 需要 my_history，简化处理
-
-        if coop_rate >= 0.8:
-            return "Highly cooperative"
-        elif coop_rate >= 0.5:
-            return "Mixed/Conditional cooperator"
-        elif coop_rate >= 0.2:
-            return "Mostly defects"
-        else:
-            return "Always defects"
 
     def generate_message(self,
                          my_history: List,
