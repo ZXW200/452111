@@ -44,7 +44,7 @@ python research.py group --n_agents 15 --rounds 30
 python research.py baseline --games pd
 
 # Cross-provider cheap talk (LLM vs LLM)
-python research.py cheap_talk --provider1 openai --provider2 claude
+python research.py cheap_talk --provider1 openai --provider2 gemini
 ```
 
 ## Available Experiments
@@ -64,7 +64,7 @@ python research.py cheap_talk --provider1 openai --provider2 claude
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--provider` | LLM provider (deepseek/openai/claude) | deepseek |
+| `--provider` | LLM provider (deepseek/openai/gemini) | deepseek |
 | `--provider1` | Player1 provider for cheap_talk | --provider |
 | `--provider2` | Player2 provider for cheap_talk | --provider |
 | `--repeats` | Number of repetitions | 3 |

@@ -5,7 +5,7 @@ Game Theory LLM Multi-Agent Research Experiments
 实验列表:
 1. Pure vs Hybrid - LLM自己分析 vs 代码辅助
 2. 记忆视窗对比 - 5/10/20/全部历史
-3. 多LLM对比 - DeepSeek vs GPT vs Claude
+3. 多LLM对比 - DeepSeek vs GPT vs Gemini
 4. Cheap Talk - 语言交流博弈
 5. 群体动力学 - 多人混合群体
 6. Baseline 对比 - LLM vs 经典策略
@@ -721,7 +721,7 @@ def _print_window_summary(results: Dict):
 
 def experiment_multi_llm(
     result_manager: ResultManager,
-    providers: List[str] = ["deepseek", "openai", "claude"],
+    providers: List[str] = ["deepseek", "openai", "gemini"],
     n_repeats: int = DEFAULT_CONFIG["n_repeats"],
     rounds: int = DEFAULT_CONFIG["rounds"],
     games: List[str] = None,
@@ -1397,7 +1397,7 @@ def experiment_group_dynamics_multi_provider(
     """
 
     if providers is None:
-        providers = ["deepseek", "openai", "claude"]
+        providers = ["deepseek", "openai", "gemini"]
     if games is None:
         games = list(GAME_REGISTRY.keys())
     if networks is None:
@@ -1599,7 +1599,7 @@ def _plot_multi_provider_comparison(network_results: Dict, game_name: str, provi
     provider_colors = {
         "deepseek": "#4CAF50",  # 绿色
         "openai": "#2196F3",    # 蓝色
-        "claude": "#FF9800",    # 橙色
+        "gemini": "#FF9800",    # 橙色
     }
 
     for ax, network_name in zip(axes, valid_networks):
@@ -1684,7 +1684,7 @@ def _plot_group_rankings(network_results: Dict, game_name: str) -> Optional[plt.
 
 def experiment_baseline_comparison(
     result_manager: ResultManager,
-    providers: List[str] = ["deepseek", "openai", "claude"],
+    providers: List[str] = ["deepseek", "openai", "gemini"],
     n_repeats: int = DEFAULT_CONFIG["n_repeats"],
     rounds: int = DEFAULT_CONFIG["rounds"],
     games: List[str] = None,
@@ -1841,7 +1841,7 @@ def _plot_baseline_multi_provider(
     provider_colors = {
         "deepseek": "#4CAF50",
         "openai": "#2196F3",
-        "claude": "#FF9800",
+        "gemini": "#FF9800",
     }
 
     baseline_names = list(baselines.keys())
@@ -1916,13 +1916,13 @@ def print_usage():
   window        - 实验2: 记忆视窗对比
   multi_llm     - 实验3: 多 LLM 对比
   cheap_talk    - 实验4: Cheap Talk 语言交流
-  group         - 实验5: 群体动力学（DeepSeek/OpenAI/Claude 三模型）
+  group         - 实验5: 群体动力学（DeepSeek/OpenAI/Gemini 三模型）
   group_single  - 实验5: 群体动力学（单 Provider，需指定 --provider）
-  baseline      - 实验6: Baseline 对比（DeepSeek/OpenAI/Claude 三模型）
+  baseline      - 实验6: Baseline 对比（DeepSeek/OpenAI/Gemini 三模型）
   all           - 运行全部实验
 
 选项:
-  --provider    LLM 提供商 (deepseek/openai/claude)    [默认: deepseek]
+  --provider    LLM 提供商 (deepseek/openai/gemini)    [默认: deepseek]
   --provider1   cheap_talk 实验的 Player1 模型         [默认: 同 --provider]
   --provider2   cheap_talk 实验的 Player2 模型         [默认: 同 --provider]
   --repeats     重复次数                               [默认: 3]
@@ -1953,7 +1953,7 @@ def print_usage():
   python research.py group --rounds 30 --n_agents 15
   python research.py all --provider openai --repeats 5
   python research.py baseline --games pd
-  python research.py cheap_talk --provider1 openai --provider2 claude
+  python research.py cheap_talk --provider1 openai --provider2 gemini
 """)
 
 
@@ -2066,7 +2066,7 @@ def main():
             result_manager,
             n_agents=n_agents,
             n_repeats=n_repeats,
-            providers=["deepseek", "openai", "claude"],
+            providers=["deepseek", "openai", "gemini"],
             rounds=rounds,
             games=games
         )
@@ -2087,7 +2087,7 @@ def main():
     if experiment in ["baseline", "all"]:
         results = experiment_baseline_comparison(
             result_manager,
-            providers=["deepseek", "openai", "claude"],
+            providers=["deepseek", "openai", "gemini"],
             n_repeats=n_repeats,
             rounds=rounds,
             games=games

@@ -299,7 +299,7 @@ class LLMStrategy:
                  strategy_tendency: str = "balanced"):
         """
         Args:
-            provider: LLM 提供商 (deepseek/openai/claude)
+            provider: LLM 提供商 (deepseek/openai/gemini)
             mode: 策略模式 (pure/hybrid)
             game_config: 博弈配置
             max_tokens: 最大 token 数

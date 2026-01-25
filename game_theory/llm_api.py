@@ -2,7 +2,7 @@
 统一 LLM API 调用接口
 Unified LLM API Interface
 
-支持: OpenAI / Claude / DeepSeek / 本地Ollama
+支持: OpenAI / Gemini / DeepSeek / 本地Ollama
 """
 
 import os
@@ -49,9 +49,9 @@ DEFAULT_CONFIG = {
         "base_url": "https://api.openai.com/v1",
         "model": "gpt-4o-mini",
     },
-    "claude": {
+    "gemini": {
         "api_key": "",
-        "model": "claude-3-haiku-20240307",
+        "model": "gemini-1.5-flash",
     },
     "deepseek": {
         "api_key": "",
@@ -81,7 +81,7 @@ def get_api_key(provider: str) -> str:
     """获取 API Key（优先环境变量）"""
     env_keys = {
         "openai": "OPENAI_API_KEY",
-        "claude": "ANTHROPIC_API_KEY",
+        "gemini": "GEMINI_API_KEY",
         "deepseek": "DEEPSEEK_API_KEY",
     }
     if provider in env_keys:
@@ -123,8 +123,8 @@ class LLMClient:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
         
-        if self.provider == "claude":
-            return self._call_claude(messages, temperature, max_tokens)
+        if self.provider == "gemini":
+            return self._call_gemini(messages, temperature, max_tokens)
         elif self.provider == "ollama":
             return self._call_ollama(messages, temperature, max_tokens)
         else:
@@ -156,41 +156,40 @@ class LLMClient:
         except Exception as e:
             return f"[API Error: {e}]"
     
-    def _call_claude(self, messages: List[Dict], temperature: float, max_tokens: int) -> str:
-        """调用 Claude API"""
-        api_key = get_api_key("claude")
-        model = self.config.get("claude", {}).get("model", "claude-3-haiku-20240307")
+    def _call_gemini(self, messages: List[Dict], temperature: float, max_tokens: int) -> str:
+        """调用 Gemini API"""
+        api_key = get_api_key("gemini")
+        model = self.config.get("gemini", {}).get("model", "gemini-1.5-flash")
 
-        # 分离 system prompt
-        system_prompt = None
-        claude_messages = []
+        # 转换消息格式为 Gemini 格式
+        contents = []
+        system_instruction = None
         for msg in messages:
             if msg["role"] == "system":
-                system_prompt = msg["content"]
-            else:
-                claude_messages.append(msg)
-
-        headers = {
-            "x-api-key": api_key,
-            "Content-Type": "application/json",
-            "anthropic-version": "2023-06-01"
-        }
+                system_instruction = msg["content"]
+            elif msg["role"] == "user":
+                contents.append({"role": "user", "parts": [{"text": msg["content"]}]})
+            elif msg["role"] == "assistant":
+                contents.append({"role": "model", "parts": [{"text": msg["content"]}]})
 
         data = {
-            "model": model,
-            "messages": claude_messages,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
+            "contents": contents,
+            "generationConfig": {
+                "temperature": temperature,
+                "maxOutputTokens": max_tokens,
+            }
         }
-        if system_prompt:
-            data["system"] = system_prompt
+        if system_instruction:
+            data["systemInstruction"] = {"parts": [{"text": system_instruction}]}
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
 
         try:
-            resp = self.session.post("https://api.anthropic.com/v1/messages", headers=headers, json=data, timeout=60)
+            resp = self.session.post(url, json=data, timeout=60)
             resp.raise_for_status()
-            return resp.json()["content"][0]["text"]
+            return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
         except Exception as e:
-            return f"[Claude Error: {e}]"
+            return f"[Gemini Error: {e}]"
     
     def _call_ollama(self, messages: List[Dict], temperature: float, max_tokens: int) -> str:
         """调用本地 Ollama"""
@@ -238,11 +237,11 @@ def setup_wizard():
     print("\n可用 Provider:")
     print("  1. deepseek  - ¥1/百万token，最便宜 (推荐)")
     print("  2. openai    - GPT-4o-mini")
-    print("  3. claude    - Claude 3 Haiku")
+    print("  3. gemini    - Gemini 1.5 Flash")
     print("  4. ollama    - 本地模型，免费")
-    
+
     choice = input("\n选择 (1-4) [1]: ").strip() or "1"
-    provider = {"1": "deepseek", "2": "openai", "3": "claude", "4": "ollama"}.get(choice, "deepseek")
+    provider = {"1": "deepseek", "2": "openai", "3": "gemini", "4": "ollama"}.get(choice, "deepseek")
     config["default_provider"] = provider
     
     if provider != "ollama":
