@@ -1,6 +1,6 @@
 from game_theory.llm_api import LLMClient
 
-for provider in ["deepseek", "openai", "claude"]:
+for provider in ["deepseek", "openai", "gemini"]:
     print(f"\n测试 {provider}...")
     client = LLMClient(provider=provider)
     response = client.chat("说OK")
