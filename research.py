@@ -109,7 +109,7 @@ class ResultManager:
             game_dir = os.path.join(self.root_dir, game_name)
             os.makedirs(game_dir, exist_ok=True)
 
-        print(f"实验结果目录: {self.root_dir}")
+        print(f"Results dir: {self.root_dir}")
 
     def get_game_dir(self, game_name: str) -> str:
         """获取博弈类型目录"""
@@ -123,7 +123,7 @@ class ResultManager:
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2, default=str)
 
-        print(f"  💾 保存: {filepath}")
+        print(f"  Saved: {filepath}")
         return filepath
 
     def save_figure(self, game_name: str, experiment_name: str, fig: plt.Figure) -> str:
@@ -134,7 +134,7 @@ class ResultManager:
         fig.savefig(filepath, dpi=150, bbox_inches='tight')
         plt.close(fig)
 
-        print(f"  📊 保存: {filepath}")
+        print(f"  Saved: {filepath}")
         return filepath
 
     def save_config(self, config: Dict):
@@ -142,14 +142,14 @@ class ResultManager:
         filepath = os.path.join(self.root_dir, "experiment_config.json")
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
-        print(f"配置保存: {filepath}")
+        print(f"Config saved: {filepath}")
 
     def save_summary(self, all_results: Dict):
         """保存汇总报告到根目录"""
         filepath = os.path.join(self.root_dir, "summary.json")
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(all_results, f, ensure_ascii=False, indent=2, default=str)
-        print(f"汇总保存: {filepath}")
+        print(f"Summary saved: {filepath}")
 
     def save_transcript(self, game_name: str, experiment_name: str, content: str) -> str:
         """保存易读的 transcript 文本文件"""
@@ -159,7 +159,7 @@ class ResultManager:
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(content)
 
-        print(f"  📝 保存: {filepath}")
+        print(f"  Saved: {filepath}")
         return filepath
 
     def save_detail(self, experiment_name: str, provider: str, trial: int, rounds: int, data: Dict) -> str:
@@ -184,7 +184,7 @@ class ResultManager:
                 writer.writeheader()
                 writer.writerows(rows)
 
-        print(f"  📋 汇总: {filepath}")
+        print(f"  Summary: {filepath}")
         return filepath
 
     def _flatten_summary_to_rows(self, experiment_name: str, data: Dict) -> List[Dict]:
@@ -309,7 +309,7 @@ def print_game_header(game_name: str):
     """打印博弈类型标题"""
     cn_name = GAME_NAMES_CN.get(game_name, game_name)
     print(f"\n{'─' * 50}")
-    print(f"  🎮 博弈类型: {cn_name}")
+    print(f"  Game: {cn_name}")
     print(f"{'─' * 50}")
 
 
@@ -482,10 +482,10 @@ def experiment_pure_vs_hybrid(
                     }
                     result_manager.save_detail(f"pure_vs_hybrid_{game_name}_{mode}", provider, trial + 1, rounds, detail_data)
 
-                    print(f"得分: {llm_payoff:.1f}, 合作率: {coop_rate:.1%}, 解析: {success_rate:.0%}")
+                    print(f"Payoff: {llm_payoff:.1f}, Coop rate: {coop_rate:.1%}, Parse: {success_rate:.0%}")
 
                 except Exception as e:
-                    print(f"错误: {e}")
+                    print(f"Error: {e}")
                     continue
 
         # 统计当前博弈结果
@@ -521,7 +521,7 @@ def experiment_pure_vs_hybrid(
 def _print_pure_vs_hybrid_summary(results: Dict):
     """打印 Pure vs Hybrid 汇总"""
     print_separator("汇总: Pure vs Hybrid")
-    print(f"{'博弈':<12} {'Pure 得分':<18} {'Hybrid 得分':<18} {'Pure 合作率':<14} {'Hybrid 合作率':<14}")
+    print(f"{'Game':<12} {'Pure Payoff':<18} {'Hybrid Payoff':<18} {'Pure Coop':<14} {'Hybrid Coop':<14}")
     print("-" * 76)
 
     for game_name, stats in results.items():
@@ -621,10 +621,10 @@ def experiment_memory_window(
                     }
                     result_manager.save_detail(f"memory_window_{game_name}_w{window_label}", provider, trial + 1, rounds, detail_data)
 
-                    print(f"得分: {llm_payoff:.1f}, 合作率: {coop_rate:.1%}")
+                    print(f"Payoff: {llm_payoff:.1f}, Coop rate: {coop_rate:.1%}")
 
                 except Exception as e:
-                    print(f"错误: {e}")
+                    print(f"Error: {e}")
                     continue
 
             window_results[window_label] = {
@@ -656,7 +656,7 @@ def _print_window_summary(results: Dict):
     for game_name, window_stats in results.items():
         cn_name = GAME_NAMES_CN.get(game_name, game_name)
         print(f"\n{cn_name}:")
-        print(f"  {'视窗':<8} {'得分':<18} {'合作率':<12}")
+        print(f"  {'Window':<8} {'Payoff':<18} {'Coop Rate':<12}")
         print(f"  {'-' * 38}")
 
         for window, stats in window_stats.items():
@@ -745,10 +745,10 @@ def experiment_multi_llm(
                     }
                     result_manager.save_detail(f"multi_llm_{game_name}", provider, trial + 1, rounds, detail_data)
 
-                    print(f"得分: {llm_payoff:.1f}, 合作率: {coop_rate:.1%}")
+                    print(f"Payoff: {llm_payoff:.1f}, Coop rate: {coop_rate:.1%}")
 
                 except Exception as e:
-                    print(f"错误: {e}")
+                    print(f"Error: {e}")
                     continue
 
             provider_results[provider] = {
@@ -780,7 +780,7 @@ def _print_multi_llm_summary(results: Dict):
     for game_name, provider_stats in results.items():
         cn_name = GAME_NAMES_CN.get(game_name, game_name)
         print(f"\n{cn_name}:")
-        print(f"  {'LLM':<12} {'得分':<18} {'合作率':<12}")
+        print(f"  {'LLM':<12} {'Payoff':<18} {'Coop Rate':<12}")
         print(f"  {'-' * 42}")
 
         sorted_providers = sorted(
@@ -916,10 +916,10 @@ def experiment_cheap_talk(
                     }
                     result_manager.save_detail(f"cheap_talk_{game_name}_{mode}", provider, trial + 1, rounds, detail_data)
 
-                    print(f"得分: {llm_payoff:.1f}, 合作率: {coop_rate:.1%}")
+                    print(f"Payoff: {llm_payoff:.1f}, Coop rate: {coop_rate:.1%}")
 
                 except Exception as e:
-                    print(f"错误: {e}")
+                    print(f"Error: {e}")
                     continue
 
         game_results = {
@@ -1070,13 +1070,13 @@ def _print_cheap_talk_summary(results: Dict):
         no_talk = stats["no_talk"]
         cheap_talk = stats["cheap_talk"]
 
-        print(f"  无交流:   得分 {no_talk['payoff']['mean']:.1f} ± {no_talk['payoff']['std']:.1f}, "
-              f"合作率 {no_talk['coop_rate']['mean']:.1%}")
-        print(f"  有交流:   得分 {cheap_talk['payoff']['mean']:.1f} ± {cheap_talk['payoff']['std']:.1f}, "
-              f"合作率 {cheap_talk['coop_rate']['mean']:.1%}")
+        print(f"  No talk:    Payoff {no_talk['payoff']['mean']:.1f} ± {no_talk['payoff']['std']:.1f}, "
+              f"Coop {no_talk['coop_rate']['mean']:.1%}")
+        print(f"  Cheap talk: Payoff {cheap_talk['payoff']['mean']:.1f} ± {cheap_talk['payoff']['std']:.1f}, "
+              f"Coop {cheap_talk['coop_rate']['mean']:.1%}")
 
         if cheap_talk.get("promise_kept"):
-            print(f"  承诺遵守率: {cheap_talk['promise_kept']['mean']:.1%}")
+            print(f"  Promise kept: {cheap_talk['promise_kept']['mean']:.1%}")
 
 
 # ============================================================
@@ -1215,14 +1215,14 @@ def experiment_group_dynamics(
                 }
 
                 # 打印前 5 名
-                print(f"    🏆 平均排名 (Top 5):")
+                print(f"    Avg ranking (Top 5):")
                 for rank, (aid, payoff) in enumerate(network_results[network_name]["rankings"][:5], 1):
                     coop = coop_rates.get(aid, 0)
-                    marker = "🤖" if aid.startswith("LLM") else "👤"
-                    print(f"      {marker} {rank}. {aid}: {payoff:.1f} (合作率: {coop:.1%})")
+                    marker = "[LLM]" if aid.startswith("LLM") else "[Classic]"
+                    print(f"      {marker} {rank}. {aid}: {payoff:.1f} (Coop: {coop:.1%})")
 
             except Exception as e:
-                print(f"    ❌ 错误: {e}")
+                print(f"    Error: {e}")
                 import traceback
                 traceback.print_exc()
                 network_results[network_name] = {"error": str(e)}
@@ -1389,14 +1389,14 @@ def experiment_group_dynamics_multi_provider(
                     "traditional_comparison": traditional_results,
                 }
 
-                print(f"    🤖 LLM 平均排名 (Top 5):")
+                print(f"    LLM Avg ranking (Top 5):")
                 llm_ranked = sorted(llm_results.items(), key=lambda x: x[1], reverse=True)
                 for rank, (aid, payoff) in enumerate(llm_ranked[:5], 1):
                     coop = coop_rates.get(aid, 0)
-                    print(f"      {rank}. {aid}: {payoff:.1f} (合作率: {coop:.1%})")
+                    print(f"      {rank}. {aid}: {payoff:.1f} (Coop: {coop:.1%})")
 
             except Exception as e:
-                print(f"    ❌ 错误: {e}")
+                print(f"    Error: {e}")
                 import traceback
                 traceback.print_exc()
                 network_results[network_name] = {"error": str(e)}
@@ -1548,7 +1548,7 @@ def experiment_baseline_comparison(
         game_results = {}
 
         for provider in providers:
-            print(f"\n  🤖 Provider: {provider.upper()}")
+            print(f"\n  Provider: {provider.upper()}")
 
             baseline_results = {}
 
@@ -1603,10 +1603,10 @@ def experiment_baseline_comparison(
                         }
                         result_manager.save_detail(f"baseline_{game_name}_{baseline_name}", provider, trial + 1, rounds, detail_data)
 
-                        print(f"得分: {llm_payoff:.1f}, 合作率: {coop_rate:.1%}")
+                        print(f"Payoff: {llm_payoff:.1f}, Coop rate: {coop_rate:.1%}")
 
                     except Exception as e:
-                        print(f"错误: {e}")
+                        print(f"Error: {e}")
                         continue
 
                 baseline_results[baseline_name] = {
@@ -1697,8 +1697,8 @@ def _print_baseline_summary_multi_provider(results: Dict, providers: List[str]):
             if provider not in provider_stats:
                 continue
 
-            print(f"\n  🤖 {provider.upper()}:")
-            print(f"    {'对手':<16} {'得分':<18} {'合作率':<12}")
+            print(f"\n  {provider.upper()}:")
+            print(f"    {'Opponent':<16} {'Payoff':<18} {'Coop Rate':<12}")
             print(f"    {'-' * 46}")
 
             baseline_data = provider_stats[provider]
@@ -1896,8 +1896,8 @@ def main():
     result_manager.save_summary(all_results)
 
     print_separator("实验完成")
-    print(f"📁 结果目录: {result_manager.root_dir}")
-    print(f"📊 总共运行: {len(all_results)} 个实验")
+    print(f"Results dir: {result_manager.root_dir}")
+    print(f"Total experiments: {len(all_results)}")
 
 
 if __name__ == "__main__":
