@@ -1,5 +1,5 @@
 """
-博弈论 LLM 多智能体研究实验脚本 v8
+博弈论 LLM 多智能体研究实验脚本 v9
 Game Theory LLM Multi-Agent Research Experiments
 
 实验列表:
@@ -80,16 +80,15 @@ class ResultManager:
     results/
     └── 20250121_143052/           # 时间戳
         ├── experiment_config.json  # 实验配置
-        ├── summary.json            # 汇总
+        ├── details/                # 每次实验详细数据
+        │   └── {实验名}_{模型名}_{次数}_{轮数}.json
+        ├── summary/                # 汇总报告
+        │   └── {实验名}.json
         ├── prisoners_dilemma/      # 博弈类型
         │   ├── pure_vs_hybrid.json
-        │   ├── pure_vs_hybrid.png
-        │   ├── baseline.json
-        │   └── baseline.png
+        │   └── pure_vs_hybrid.png
         ├── snowdrift/
-        │   └── ...
         └── stag_hunt/
-            └── ...
     """
 
     def __init__(self, base_dir: str = "results"):
@@ -97,6 +96,12 @@ class ResultManager:
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.root_dir = os.path.join(base_dir, self.timestamp)
         os.makedirs(self.root_dir, exist_ok=True)
+
+        # 创建 details 和 summary 目录
+        self.details_dir = os.path.join(self.root_dir, "details")
+        self.summary_dir = os.path.join(self.root_dir, "summary")
+        os.makedirs(self.details_dir, exist_ok=True)
+        os.makedirs(self.summary_dir, exist_ok=True)
 
         # 为每个博弈创建子目录
         for game_name in GAME_REGISTRY.keys():
@@ -139,10 +144,17 @@ class ResultManager:
         print(f"配置保存: {filepath}")
 
     def save_summary(self, all_results: Dict):
-        """保存汇总报告"""
+        """保存汇总报告（同时保存到根目录和 summary 目录）"""
+        # 保存到根目录
         filepath = os.path.join(self.root_dir, "summary.json")
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(all_results, f, ensure_ascii=False, indent=2, default=str)
+
+        # 保存到 summary 目录
+        summary_filepath = os.path.join(self.summary_dir, "all_experiments.json")
+        with open(summary_filepath, "w", encoding="utf-8") as f:
+            json.dump(all_results, f, ensure_ascii=False, indent=2, default=str)
+
         print(f"汇总保存: {filepath}")
 
     def save_transcript(self, game_name: str, experiment_name: str, content: str) -> str:
@@ -154,6 +166,26 @@ class ResultManager:
             f.write(content)
 
         print(f"  📝 保存: {filepath}")
+        return filepath
+
+    def save_detail(self, experiment_name: str, provider: str, trial: int, rounds: int, data: Dict) -> str:
+        """保存单次实验详细数据到 details 目录"""
+        filename = f"{experiment_name}_{provider}_{trial}_{rounds}.json"
+        filepath = os.path.join(self.details_dir, filename)
+
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2, default=str)
+
+        return filepath
+
+    def save_experiment_summary(self, experiment_name: str, data: Dict) -> str:
+        """保存实验汇总到 summary 目录"""
+        filepath = os.path.join(self.summary_dir, f"{experiment_name}.json")
+
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2, default=str)
+
+        print(f"  📋 汇总: {filepath}")
         return filepath
 
 
@@ -381,6 +413,21 @@ def experiment_pure_vs_hybrid(
                     else:
                         success_rate = 0
 
+                    # 保存详细数据
+                    detail_data = {
+                        "experiment": "pure_vs_hybrid",
+                        "game": game_name,
+                        "mode": mode,
+                        "trial": trial + 1,
+                        "rounds": rounds,
+                        "payoff": llm_payoff,
+                        "coop_rate": coop_rate,
+                        "parse_success_rate": success_rate,
+                        "llm_history": [a.name for a in llm_history],
+                        "opp_history": [a.name for a in opp_history],
+                    }
+                    result_manager.save_detail(f"pure_vs_hybrid_{game_name}_{mode}", provider, trial + 1, rounds, detail_data)
+
                     print(f"得分: {llm_payoff:.1f}, 合作率: {coop_rate:.1%}, 解析: {success_rate:.0%}")
 
                 except Exception as e:
@@ -410,6 +457,9 @@ def experiment_pure_vs_hybrid(
 
     # 打印汇总
     _print_pure_vs_hybrid_summary(all_results)
+
+    # 保存实验汇总
+    result_manager.save_experiment_summary("pure_vs_hybrid", all_results)
 
     return all_results
 
@@ -503,6 +553,20 @@ def experiment_memory_window(
                     payoffs.append(llm_payoff)
                     coop_rates.append(coop_rate)
 
+                    # 保存详细数据
+                    detail_data = {
+                        "experiment": "memory_window",
+                        "game": game_name,
+                        "window": window,
+                        "trial": trial + 1,
+                        "rounds": rounds,
+                        "payoff": llm_payoff,
+                        "coop_rate": coop_rate,
+                        "llm_history": [a.name for a in llm_history],
+                        "opp_history": [a.name for a in opp_history],
+                    }
+                    result_manager.save_detail(f"memory_window_{game_name}_w{window_label}", provider, trial + 1, rounds, detail_data)
+
                     print(f"得分: {llm_payoff:.1f}, 合作率: {coop_rate:.1%}")
 
                 except Exception as e:
@@ -524,6 +588,9 @@ def experiment_memory_window(
         result_manager.save_figure(game_name, "memory_window", fig)
 
     _print_window_summary(all_results)
+
+    # 保存实验汇总
+    result_manager.save_experiment_summary("memory_window", all_results)
 
     return all_results
 
@@ -610,6 +677,20 @@ def experiment_multi_llm(
                     payoffs.append(llm_payoff)
                     coop_rates.append(coop_rate)
 
+                    # 保存详细数据
+                    detail_data = {
+                        "experiment": "multi_llm",
+                        "game": game_name,
+                        "provider": provider,
+                        "trial": trial + 1,
+                        "rounds": rounds,
+                        "payoff": llm_payoff,
+                        "coop_rate": coop_rate,
+                        "llm_history": [a.name for a in llm_history],
+                        "opp_history": [a.name for a in opp_history],
+                    }
+                    result_manager.save_detail(f"multi_llm_{game_name}", provider, trial + 1, rounds, detail_data)
+
                     print(f"得分: {llm_payoff:.1f}, 合作率: {coop_rate:.1%}")
 
                 except Exception as e:
@@ -631,6 +712,9 @@ def experiment_multi_llm(
         result_manager.save_figure(game_name, "multi_llm", fig)
 
     _print_multi_llm_summary(all_results)
+
+    # 保存实验汇总
+    result_manager.save_experiment_summary("multi_llm", all_results)
 
     return all_results
 
@@ -763,6 +847,21 @@ def experiment_cheap_talk(
 
                     detailed_trials[mode].append(trial_record)
 
+                    # 保存详细数据
+                    detail_data = {
+                        "experiment": "cheap_talk",
+                        "game": game_name,
+                        "mode": mode,
+                        "trial": trial + 1,
+                        "rounds": rounds,
+                        "payoff": llm_payoff,
+                        "coop_rate": coop_rate,
+                        "messages": messages_sent if use_cheap_talk else [],
+                        "llm_history": [a.name for a in llm_history],
+                        "opp_history": [a.name for a in opp_history],
+                    }
+                    result_manager.save_detail(f"cheap_talk_{game_name}_{mode}", provider, trial + 1, rounds, detail_data)
+
                     print(f"得分: {llm_payoff:.1f}, 合作率: {coop_rate:.1%}")
 
                 except Exception as e:
@@ -806,6 +905,9 @@ def experiment_cheap_talk(
         result_manager.save_figure(game_name, "cheap_talk", fig)
 
     _print_cheap_talk_summary(all_results)
+
+    # 保存实验汇总
+    result_manager.save_experiment_summary("cheap_talk", all_results)
 
     return all_results
 
@@ -1018,8 +1120,11 @@ def experiment_group_dynamics(
                     sim.run()
 
                     # 3. 收集单次数据
+                    trial_payoffs = {}
+                    trial_coop_rates = {}
                     for aid, agent in agents.items():
                         all_trials_payoffs[aid].append(agent.total_payoff)
+                        trial_payoffs[aid] = agent.total_payoff
 
                         history = agent.game_history
                         if history:
@@ -1028,6 +1133,20 @@ def experiment_group_dynamics(
                         else:
                             rate = 0.0
                         all_trials_coop_rates[aid].append(rate)
+                        trial_coop_rates[aid] = rate
+
+                    # 保存详细数据
+                    detail_data = {
+                        "experiment": "group_dynamics",
+                        "game": game_name,
+                        "network": network_name,
+                        "trial": i + 1,
+                        "rounds": rounds,
+                        "n_agents": n_agents,
+                        "payoffs": trial_payoffs,
+                        "coop_rates": trial_coop_rates,
+                    }
+                    result_manager.save_detail(f"group_{game_name}_{network_name}", provider, i + 1, rounds, detail_data)
 
                     print("Done")
 
@@ -1060,6 +1179,9 @@ def experiment_group_dynamics(
         fig = _plot_group_rankings(network_results, game_name)
         if fig:
             result_manager.save_figure(game_name, "group_dynamics", fig)
+
+    # 保存实验汇总
+    result_manager.save_experiment_summary("group_dynamics", all_results)
 
     return all_results
 
@@ -1166,8 +1288,11 @@ def experiment_group_dynamics_multi_provider(
                     sim.run()
 
                     # 3. 收集单次数据
+                    trial_payoffs = {}
+                    trial_coop_rates = {}
                     for aid, agent in agents.items():
                         all_trials_payoffs[aid].append(agent.total_payoff)
+                        trial_payoffs[aid] = agent.total_payoff
 
                         history = agent.game_history
                         if history:
@@ -1176,6 +1301,21 @@ def experiment_group_dynamics_multi_provider(
                         else:
                             rate = 0.0
                         all_trials_coop_rates[aid].append(rate)
+                        trial_coop_rates[aid] = rate
+
+                    # 保存详细数据
+                    detail_data = {
+                        "experiment": "group_dynamics_multi",
+                        "game": game_name,
+                        "network": network_name,
+                        "providers": providers,
+                        "trial": i + 1,
+                        "rounds": rounds,
+                        "n_agents": n_agents,
+                        "payoffs": trial_payoffs,
+                        "coop_rates": trial_coop_rates,
+                    }
+                    result_manager.save_detail(f"group_multi_{game_name}_{network_name}", "multi", i + 1, rounds, detail_data)
 
                     print("Done")
 
@@ -1213,6 +1353,9 @@ def experiment_group_dynamics_multi_provider(
         fig = _plot_multi_provider_comparison(network_results, game_name, providers)
         if fig:
             result_manager.save_figure(game_name, "group_dynamics_multi_provider", fig)
+
+    # 保存实验汇总
+    result_manager.save_experiment_summary("group_dynamics_multi_provider", all_results)
 
     return all_results
 
@@ -1391,6 +1534,21 @@ def experiment_baseline_comparison(
                         payoffs.append(llm_payoff)
                         coop_rates.append(coop_rate)
 
+                        # 保存详细数据
+                        detail_data = {
+                            "experiment": "baseline",
+                            "game": game_name,
+                            "provider": provider,
+                            "baseline": baseline_name,
+                            "trial": trial + 1,
+                            "rounds": rounds,
+                            "payoff": llm_payoff,
+                            "coop_rate": coop_rate,
+                            "llm_history": [a.name for a in llm_history],
+                            "opp_history": [a.name for a in opp_history],
+                        }
+                        result_manager.save_detail(f"baseline_{game_name}_{baseline_name}", provider, trial + 1, rounds, detail_data)
+
                         print(f"得分: {llm_payoff:.1f}, 合作率: {coop_rate:.1%}")
 
                     except Exception as e:
@@ -1415,6 +1573,9 @@ def experiment_baseline_comparison(
             result_manager.save_figure(game_name, "baseline", fig)
 
     _print_baseline_summary_multi_provider(all_results, providers)
+
+    # 保存实验汇总
+    result_manager.save_experiment_summary("baseline", all_results)
 
     return all_results
 
@@ -1502,7 +1663,7 @@ def _print_baseline_summary_multi_provider(results: Dict, providers: List[str]):
 def print_usage():
     """打印使用说明"""
     print("""
-博弈论 LLM 研究实验脚本 v8
+博弈论 LLM 研究实验脚本 v9
 ==========================
 
 用法:
@@ -1528,10 +1689,13 @@ def print_usage():
   results/{时间戳}/
   ├── experiment_config.json
   ├── summary.json
+  ├── details/                    # 每次实验详细数据
+  │   └── {实验名}_{模型名}_{次数}_{轮数}.json
+  ├── summary/                    # 各实验汇总
+  │   └── {实验名}.json
   ├── prisoners_dilemma/
   │   ├── pure_vs_hybrid.json
-  │   ├── pure_vs_hybrid.png
-  │   └── ...
+  │   └── pure_vs_hybrid.png
   ├── snowdrift/
   └── stag_hunt/
 
