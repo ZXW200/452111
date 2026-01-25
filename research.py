@@ -1849,7 +1849,6 @@ def print_usage():
   multi_llm     - 实验3: 多 LLM 对比
   cheap_talk    - 实验4: Cheap Talk 语言交流
   group         - 实验5: 群体动力学（DeepSeek/OpenAI/Claude 三模型）
-  group_multi   - 同 group（别名）
   group_single  - 实验5: 群体动力学（单 Provider，需指定 --provider）
   baseline      - 实验6: Baseline 对比（DeepSeek/OpenAI/Claude 三模型）
   all           - 运行全部实验
