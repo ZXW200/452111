@@ -145,17 +145,10 @@ class ResultManager:
         print(f"配置保存: {filepath}")
 
     def save_summary(self, all_results: Dict):
-        """保存汇总报告（同时保存到根目录和 summary 目录）"""
-        # 保存到根目录
+        """保存汇总报告到根目录"""
         filepath = os.path.join(self.root_dir, "summary.json")
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(all_results, f, ensure_ascii=False, indent=2, default=str)
-
-        # 保存到 summary 目录
-        summary_filepath = os.path.join(self.summary_dir, "all_experiments.json")
-        with open(summary_filepath, "w", encoding="utf-8") as f:
-            json.dump(all_results, f, ensure_ascii=False, indent=2, default=str)
-
         print(f"汇总保存: {filepath}")
 
     def save_transcript(self, game_name: str, experiment_name: str, content: str) -> str:
@@ -204,11 +197,32 @@ class ResultManager:
                     if isinstance(stats, dict) and "payoff" in stats:
                         row = self._make_summary_row(experiment_name, game_name, key, stats)
                         rows.append(row)
+                    elif isinstance(stats, dict) and "payoffs" in stats:
+                        # group_dynamics 结构: payoffs/coop_rates/rankings
+                        rows.extend(self._make_group_summary_rows(experiment_name, game_name, key, stats))
                     elif isinstance(stats, dict):
                         for sub_key, sub_stats in stats.items():
                             if isinstance(sub_stats, dict) and "payoff" in sub_stats:
                                 row = self._make_summary_row(experiment_name, game_name, f"{key}_{sub_key}", sub_stats)
                                 rows.append(row)
+
+        return rows
+
+    def _make_group_summary_rows(self, experiment: str, game: str, network: str, stats: Dict) -> List[Dict]:
+        """生成 group_dynamics 的 summary 行"""
+        rows = []
+        payoffs = stats.get("payoffs", {})
+        coop_rates = stats.get("coop_rates", {})
+
+        for agent_id, payoff in payoffs.items():
+            coop = coop_rates.get(agent_id, 0)
+            rows.append({
+                "experiment": experiment,
+                "game": game,
+                "condition": f"{network}_{agent_id}",
+                "payoff": f"{payoff:.1f}",
+                "coop_rate": f"{coop * 100:.1f}%",
+            })
 
         return rows
 
