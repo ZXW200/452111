@@ -854,19 +854,26 @@ def _print_multi_llm_summary(results: Dict):
 
 def experiment_cheap_talk(
     result_manager: ResultManager,
-    provider: str = DEFAULT_CONFIG["provider"],
+    provider1: str = DEFAULT_CONFIG["provider"],
+    provider2: str = None,
     n_repeats: int = DEFAULT_CONFIG["n_repeats"],
     rounds: int = DEFAULT_CONFIG["rounds"],
     games: List[str] = None,
 ) -> Dict:
-    """Cheap Talk 实验 - LLM vs LLM 双向交流"""
+    """Cheap Talk 实验 - LLM vs LLM 双向交流，支持不同 provider 对战"""
+
+    if provider2 is None:
+        provider2 = provider1
 
     if games is None:
         games = list(GAME_REGISTRY.keys())
 
     print_separator("实验4: Cheap Talk (语言交流)")
     print("对比: 无交流 vs 有语言交流 (LLM vs LLM)")
-    print(f"Provider: {provider} | Repeats: {n_repeats} | Rounds: {rounds}")
+    if provider1 == provider2:
+        print(f"Provider: {provider1} vs {provider2} | Repeats: {n_repeats} | Rounds: {rounds}")
+    else:
+        print(f"Provider: {provider1} vs {provider2} (跨模型对战) | Repeats: {n_repeats} | Rounds: {rounds}")
 
     all_results = {}
 
@@ -891,21 +898,21 @@ def experiment_cheap_talk(
                 try:
                     use_cheap_talk = (mode == "cheap_talk")
 
-                    # 创建两个 LLM 策略
+                    # 创建两个 LLM 策略（可以是不同 provider）
                     llm1 = LLMStrategy(
-                        provider=provider,
+                        provider=provider1,
                         mode="hybrid",
                         game_config=game_config,
                         enable_cheap_talk=use_cheap_talk,
-                        agent_name="Player1",
+                        agent_name=f"Player1({provider1})",
                     )
 
                     llm2 = LLMStrategy(
-                        provider=provider,
+                        provider=provider2,
                         mode="hybrid",
                         game_config=game_config,
                         enable_cheap_talk=use_cheap_talk,
-                        agent_name="Player2",
+                        agent_name=f"Player2({provider2})",
                     )
 
                     total_payoff_1 = 0
@@ -1021,7 +1028,8 @@ def experiment_cheap_talk(
                         "player1_responses": llm1.raw_responses.copy(),
                         "player2_responses": llm2.raw_responses.copy(),
                     }
-                    result_manager.save_detail(f"cheap_talk_{game_name}_{mode}", provider, trial + 1, rounds, detail_data)
+                    provider_label = f"{provider1}_vs_{provider2}" if provider1 != provider2 else provider1
+                    result_manager.save_detail(f"cheap_talk_{game_name}_{mode}", provider_label, trial + 1, rounds, detail_data)
 
                     avg_coop = (coop_rate_1 + coop_rate_2) / 2
                     print(f"Total: {total_payoff:.1f}, Avg coop: {avg_coop:.1%}")
@@ -1052,10 +1060,11 @@ def experiment_cheap_talk(
         result_manager.save_json(game_name, "cheap_talk", game_results)
 
         # 保存每轮记录
-        result_manager.save_round_records("cheap_talk", game_name, provider, all_round_records)
+        provider_label = f"{provider1}_vs_{provider2}" if provider1 != provider2 else provider1
+        result_manager.save_round_records("cheap_talk", game_name, provider_label, all_round_records)
 
         # 生成易读的 transcript 文本文件
-        transcript = _generate_cheap_talk_transcript(game_name, provider, detailed_trials)
+        transcript = _generate_cheap_talk_transcript(game_name, provider1, provider2, detailed_trials)
         result_manager.save_transcript(game_name, "cheap_talk", transcript)
 
         # 生成图表 - 转换数据格式以适配 plot_cooperation_comparison
@@ -1080,14 +1089,14 @@ def experiment_cheap_talk(
     return all_results
 
 
-def _generate_cheap_talk_transcript(game_name: str, provider: str, detailed_trials: Dict) -> str:
+def _generate_cheap_talk_transcript(game_name: str, provider1: str, provider2: str, detailed_trials: Dict) -> str:
     """生成易读的 Cheap Talk 交互记录 (LLM vs LLM)"""
     cn_name = GAME_NAMES_CN.get(game_name, game_name)
 
     lines = []
     lines.append("=" * 70)
     lines.append(f"CHEAP TALK 实验记录 - {cn_name}")
-    lines.append(f"LLM Provider: {provider}")
+    lines.append(f"Player1: {provider1} | Player2: {provider2}")
     lines.append(f"对战模式: LLM vs LLM (双向交流)")
     lines.append("=" * 70)
     lines.append("")
@@ -1914,6 +1923,8 @@ def print_usage():
 
 选项:
   --provider    LLM 提供商 (deepseek/openai/claude)    [默认: deepseek]
+  --provider1   cheap_talk 实验的 Player1 模型         [默认: 同 --provider]
+  --provider2   cheap_talk 实验的 Player2 模型         [默认: 同 --provider]
   --repeats     重复次数                               [默认: 3]
   --rounds      每次轮数                               [默认: 20]
   --games       指定博弈 (pd/snowdrift/stag_hunt/harmony/all) [默认: all]
@@ -1942,6 +1953,7 @@ def print_usage():
   python research.py group --rounds 30 --n_agents 15
   python research.py all --provider openai --repeats 5
   python research.py baseline --games pd
+  python research.py cheap_talk --provider1 openai --provider2 claude
 """)
 
 
@@ -1965,11 +1977,19 @@ def main():
     rounds = DEFAULT_CONFIG["rounds"]
     games = None
     n_agents = 10
+    provider1 = None  # cheap_talk 专用
+    provider2 = None  # cheap_talk 专用
 
     i = 2
     while i < len(sys.argv):
         if sys.argv[i] == "--provider" and i + 1 < len(sys.argv):
             provider = sys.argv[i + 1]
+            i += 2
+        elif sys.argv[i] == "--provider1" and i + 1 < len(sys.argv):
+            provider1 = sys.argv[i + 1]
+            i += 2
+        elif sys.argv[i] == "--provider2" and i + 1 < len(sys.argv):
+            provider2 = sys.argv[i + 1]
             i += 2
         elif sys.argv[i] == "--repeats" and i + 1 < len(sys.argv):
             n_repeats = int(sys.argv[i + 1])
@@ -2032,8 +2052,11 @@ def main():
         all_results["multi_llm"] = results
 
     if experiment in ["cheap_talk", "all"]:
+        # cheap_talk 支持 --provider1 和 --provider2 指定两个不同的 LLM
+        p1 = provider1 if provider1 else provider
+        p2 = provider2 if provider2 else provider
         results = experiment_cheap_talk(
-            result_manager, provider=provider, n_repeats=n_repeats, rounds=rounds, games=games
+            result_manager, provider1=p1, provider2=p2, n_repeats=n_repeats, rounds=rounds, games=games
         )
         all_results["cheap_talk"] = results
 

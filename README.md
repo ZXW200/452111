@@ -42,6 +42,9 @@ python research.py baseline
 python research.py all --provider deepseek --repeats 5 --rounds 30
 python research.py group --n_agents 15 --rounds 30
 python research.py baseline --games pd
+
+# Cross-provider cheap talk (LLM vs LLM)
+python research.py cheap_talk --provider1 openai --provider2 claude
 ```
 
 ## Available Experiments
@@ -51,7 +54,7 @@ python research.py baseline --games pd
 | `pure_hybrid` | Pure vs Hybrid LLM mode comparison |
 | `window` | Memory window size comparison |
 | `multi_llm` | Multi-provider LLM comparison |
-| `cheap_talk` | Language communication experiment |
+| `cheap_talk` | Language communication (LLM vs LLM, cross-provider) |
 | `group` | Group dynamics (multi-provider) |
 | `group_single` | Group dynamics (single provider) |
 | `baseline` | LLM vs classical strategies |
@@ -62,6 +65,8 @@ python research.py baseline --games pd
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--provider` | LLM provider (deepseek/openai/claude) | deepseek |
+| `--provider1` | Player1 provider for cheap_talk | --provider |
+| `--provider2` | Player2 provider for cheap_talk | --provider |
 | `--repeats` | Number of repetitions | 3 |
 | `--rounds` | Rounds per game | 20 |
 | `--games` | Game type (pd/snowdrift/stag_hunt/harmony/all) | all |
